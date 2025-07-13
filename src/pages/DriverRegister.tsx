@@ -7,11 +7,16 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Car } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import AddressForm from "@/components/AddressForm";
 import FileUpload from "@/components/FileUpload";
 
 const DriverRegister = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+  
   const [formData, setFormData] = useState({
     fullName: "",
     birthDate: "",
@@ -20,6 +25,12 @@ const DriverRegister = () => {
     phone: "",
     email: "",
     susNumber: "",
+    cnhNumber: "",
+    vehicleMake: "",
+    vehicleModel: "",
+    vehiclePlate: "",
+    vehicleYear: "",
+    vehicleColor: "",
     acceptTerms: false
   });
 
@@ -61,10 +72,122 @@ const DriverRegister = () => {
     return cleanValue.replace(/(\d{2})(\d{4,5})(\d{4})/, "($1) $2-$3");
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const uploadFile = async (file: File, bucket: string, folder: string) => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random()}.${fileExt}`;
+    const filePath = `${folder}/${fileName}`;
+
+    const { error } = await supabase.storage
+      .from(bucket)
+      .upload(filePath, file);
+
+    if (error) throw error;
+    return filePath;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Driver registration data:", { formData, address, files });
-    navigate("/success", { state: { userType: "driver" } });
+    setLoading(true);
+
+    try {
+      // Upload files
+      let profilePhotoUrl = "";
+      let cnhFrontUrl = "";
+      let cnhBackUrl = "";
+      let vehiclePhotoUrl = "";
+      let vehicleDocumentUrl = "";
+      let residenceProofUrl = "";
+      let selfieUrl = "";
+
+      if (files.profilePhoto.length > 0) {
+        profilePhotoUrl = await uploadFile(files.profilePhoto[0], 'profile-photos', 'drivers');
+      }
+      if (files.cnhFront.length > 0) {
+        cnhFrontUrl = await uploadFile(files.cnhFront[0], 'cnh-photos', 'drivers');
+      }
+      if (files.cnhBack.length > 0) {
+        cnhBackUrl = await uploadFile(files.cnhBack[0], 'cnh-photos', 'drivers');
+      }
+      if (files.vehiclePhoto.length > 0) {
+        vehiclePhotoUrl = await uploadFile(files.vehiclePhoto[0], 'vehicle-photos', 'drivers');
+      }
+      if (files.vehicleDocument.length > 0) {
+        vehicleDocumentUrl = await uploadFile(files.vehicleDocument[0], 'documents', 'drivers');
+      }
+      if (files.residenceProof.length > 0) {
+        residenceProofUrl = await uploadFile(files.residenceProof[0], 'residence-proofs', 'drivers');
+      }
+      if (files.selfieWithDocument.length > 0) {
+        selfieUrl = await uploadFile(files.selfieWithDocument[0], 'documents', 'drivers');
+      }
+
+      // Generate UUID for the profile
+      const profileId = crypto.randomUUID();
+
+      // Create profile
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: profileId,
+          full_name: formData.fullName,
+          cpf: formData.cpf.replace(/\D/g, ''),
+          phone: formData.phone.replace(/\D/g, ''),
+          email: formData.email,
+          birth_date: formData.birthDate,
+          rg: formData.rg,
+          street: address.street,
+          number: address.number,
+          complement: address.complement || null,
+          neighborhood: address.neighborhood,
+          city: address.city,
+          state: address.state,
+          cep: address.cep.replace(/\D/g, ''),
+          user_type: 'driver',
+          profile_photo: profilePhotoUrl,
+          residence_proof: residenceProofUrl,
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (profileError) throw profileError;
+
+      // Create driver record
+      const { error: driverError } = await supabase
+        .from('drivers')
+        .insert({
+          id: profile.id,
+          cnh_number: formData.cnhNumber,
+          cnh_front_photo: cnhFrontUrl,
+          cnh_back_photo: cnhBackUrl,
+          vehicle_make: formData.vehicleMake,
+          vehicle_model: formData.vehicleModel,
+          vehicle_plate: formData.vehiclePlate,
+          vehicle_year: parseInt(formData.vehicleYear),
+          vehicle_color: formData.vehicleColor,
+          vehicle_photo: vehiclePhotoUrl,
+          vehicle_document: vehicleDocumentUrl,
+          selfie_with_document: selfieUrl
+        });
+
+      if (driverError) throw driverError;
+
+      toast({
+        title: "Cadastro enviado com sucesso!",
+        description: "Aguarde a aprovação da prefeitura.",
+      });
+
+      navigate("/success", { state: { userType: "driver" } });
+    } catch (error: any) {
+      console.error('Error registering driver:', error);
+      toast({
+        title: "Erro no cadastro",
+        description: error.message || "Ocorreu um erro ao enviar o cadastro.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -205,6 +328,81 @@ const DriverRegister = () => {
                 <AddressForm address={address} onAddressChange={setAddress} />
               </div>
 
+              {/* Dados do Veículo */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Dados do Veículo</h3>
+                
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="cnhNumber">Número da CNH *</Label>
+                    <Input
+                      id="cnhNumber"
+                      value={formData.cnhNumber}
+                      onChange={(e) => handleInputChange("cnhNumber", e.target.value)}
+                      className="h-12 rounded-lg"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="vehicleMake">Marca do Veículo *</Label>
+                      <Input
+                        id="vehicleMake"
+                        value={formData.vehicleMake}
+                        onChange={(e) => handleInputChange("vehicleMake", e.target.value)}
+                        className="h-12 rounded-lg"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="vehicleModel">Modelo *</Label>
+                      <Input
+                        id="vehicleModel"
+                        value={formData.vehicleModel}
+                        onChange={(e) => handleInputChange("vehicleModel", e.target.value)}
+                        className="h-12 rounded-lg"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="vehiclePlate">Placa *</Label>
+                      <Input
+                        id="vehiclePlate"
+                        value={formData.vehiclePlate}
+                        onChange={(e) => handleInputChange("vehiclePlate", e.target.value)}
+                        className="h-12 rounded-lg"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="vehicleYear">Ano *</Label>
+                      <Input
+                        id="vehicleYear"
+                        type="number"
+                        value={formData.vehicleYear}
+                        onChange={(e) => handleInputChange("vehicleYear", e.target.value)}
+                        className="h-12 rounded-lg"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="vehicleColor">Cor *</Label>
+                      <Input
+                        id="vehicleColor"
+                        value={formData.vehicleColor}
+                        onChange={(e) => handleInputChange("vehicleColor", e.target.value)}
+                        className="h-12 rounded-lg"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Documentos */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Documentos Pessoais</h3>
@@ -285,10 +483,10 @@ const DriverRegister = () => {
 
               <Button
                 type="submit"
-                className="w-full h-12 bg-secondary text-white text-lg font-semibold rounded-lg hover:bg-secondary/90 transition-colors"
-                disabled={!formData.acceptTerms}
+                className="w-full h-12 viaja-gradient text-white text-lg font-semibold rounded-lg hover:opacity-90 transition-opacity"
+                disabled={!formData.acceptTerms || loading}
               >
-                Enviar para Aprovação da Prefeitura
+                {loading ? "Enviando..." : "Enviar para Aprovação da Prefeitura"}
               </Button>
             </form>
           </CardContent>

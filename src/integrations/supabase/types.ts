@@ -14,16 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_users: {
+        Row: {
+          created_at: string | null
+          email: string
+          full_name: string
+          id: string
+          password_hash: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          full_name: string
+          id?: string
+          password_hash: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          full_name?: string
+          id?: string
+          password_hash?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       drivers: {
         Row: {
           cnh_back_photo: string | null
           cnh_front_photo: string | null
           cnh_number: string
           id: string
+          selfie_with_document: string | null
           vehicle_color: string
           vehicle_document: string | null
           vehicle_make: string
           vehicle_model: string
+          vehicle_photo: string | null
           vehicle_plate: string
           vehicle_year: number
         }
@@ -32,10 +61,12 @@ export type Database = {
           cnh_front_photo?: string | null
           cnh_number: string
           id: string
+          selfie_with_document?: string | null
           vehicle_color: string
           vehicle_document?: string | null
           vehicle_make: string
           vehicle_model: string
+          vehicle_photo?: string | null
           vehicle_plate: string
           vehicle_year: number
         }
@@ -44,10 +75,12 @@ export type Database = {
           cnh_front_photo?: string | null
           cnh_number?: string
           id?: string
+          selfie_with_document?: string | null
           vehicle_color?: string
           vehicle_document?: string | null
           vehicle_make?: string
           vehicle_model?: string
+          vehicle_photo?: string | null
           vehicle_plate?: string
           vehicle_year?: number
         }
@@ -61,23 +94,61 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          created_at: string | null
+          id: string
+          message: string
+          read: boolean | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          message: string
+          read?: boolean | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          message?: string
+          read?: boolean | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patients: {
         Row: {
           dependency_description: string | null
           has_dependency: boolean | null
           id: string
+          special_needs: string | null
           sus_card: string
         }
         Insert: {
           dependency_description?: string | null
           has_dependency?: boolean | null
           id: string
+          special_needs?: string | null
           sus_card: string
         }
         Update: {
           dependency_description?: string | null
           has_dependency?: boolean | null
           id?: string
+          special_needs?: string | null
           sus_card?: string
         }
         Relationships: [
@@ -92,42 +163,132 @@ export type Database = {
       }
       profiles: {
         Row: {
+          birth_date: string | null
+          cep: string | null
+          city: string | null
+          complement: string | null
           cpf: string
           created_at: string | null
           email: string
           full_name: string
           id: string
           is_active: boolean | null
+          neighborhood: string | null
+          number: string | null
           phone: string
           profile_photo: string | null
+          rejection_reason: string | null
+          residence_proof: string | null
+          rg: string | null
+          state: string | null
+          status: string | null
+          street: string | null
           updated_at: string | null
           user_type: string
         }
         Insert: {
+          birth_date?: string | null
+          cep?: string | null
+          city?: string | null
+          complement?: string | null
           cpf: string
           created_at?: string | null
           email: string
           full_name: string
           id: string
           is_active?: boolean | null
+          neighborhood?: string | null
+          number?: string | null
           phone: string
           profile_photo?: string | null
+          rejection_reason?: string | null
+          residence_proof?: string | null
+          rg?: string | null
+          state?: string | null
+          status?: string | null
+          street?: string | null
           updated_at?: string | null
           user_type: string
         }
         Update: {
+          birth_date?: string | null
+          cep?: string | null
+          city?: string | null
+          complement?: string | null
           cpf?: string
           created_at?: string | null
           email?: string
           full_name?: string
           id?: string
           is_active?: boolean | null
+          neighborhood?: string | null
+          number?: string | null
           phone?: string
           profile_photo?: string | null
+          rejection_reason?: string | null
+          residence_proof?: string | null
+          rg?: string | null
+          state?: string | null
+          status?: string | null
+          street?: string | null
           updated_at?: string | null
           user_type?: string
         }
         Relationships: []
+      }
+      rides: {
+        Row: {
+          created_at: string | null
+          destination_address: string
+          driver_id: string | null
+          id: string
+          patient_id: string
+          pickup_address: string
+          pickup_date: string
+          pickup_time: string
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          destination_address: string
+          driver_id?: string | null
+          id?: string
+          patient_id: string
+          pickup_address: string
+          pickup_date: string
+          pickup_time: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          destination_address?: string
+          driver_id?: string | null
+          id?: string
+          patient_id?: string
+          pickup_address?: string
+          pickup_date?: string
+          pickup_time?: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rides_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rides_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

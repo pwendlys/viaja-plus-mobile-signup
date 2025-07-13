@@ -1,20 +1,118 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Car, MapPin, Clock, UserCheck, UserX, CheckCircle, AlertCircle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const Dashboard = () => {
-  // Mock data - substituir por dados reais do Supabase
-  const stats = {
-    totalPatients: 247,
-    totalDrivers: 45,
-    totalRides: 1532,
-    pendingRegistrations: 12,
-    approvedPatients: 235,
-    rejectedPatients: 12,
-    approvedDrivers: 38,
-    rejectedDrivers: 7,
-    ridesThisMonth: 89,
-    activeRides: 3
+  const [stats, setStats] = useState({
+    totalPatients: 0,
+    totalDrivers: 0,
+    totalRides: 0,
+    pendingRegistrations: 0,
+    approvedPatients: 0,
+    rejectedPatients: 0,
+    approvedDrivers: 0,
+    rejectedDrivers: 0,
+    ridesThisMonth: 0,
+    activeRides: 0
+  });
+  const [loading, setLoading] = useState(true);
+
+  const fetchStats = async () => {
+    try {
+      // Fetch patients count
+      const { count: totalPatients } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_type', 'patient');
+
+      // Fetch drivers count
+      const { count: totalDrivers } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_type', 'driver');
+
+      // Fetch rides count
+      const { count: totalRides } = await supabase
+        .from('rides')
+        .select('*', { count: 'exact', head: true });
+
+      // Fetch pending registrations
+      const { count: pendingRegistrations } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+
+      // Fetch approved/rejected counts
+      const { count: approvedPatients } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_type', 'patient')
+        .eq('status', 'approved');
+
+      const { count: rejectedPatients } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_type', 'patient')
+        .eq('status', 'rejected');
+
+      const { count: approvedDrivers } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_type', 'driver')
+        .eq('status', 'approved');
+
+      const { count: rejectedDrivers } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_type', 'driver')
+        .eq('status', 'rejected');
+
+      setStats({
+        totalPatients: totalPatients || 0,
+        totalDrivers: totalDrivers || 0,
+        totalRides: totalRides || 0,
+        pendingRegistrations: pendingRegistrations || 0,
+        approvedPatients: approvedPatients || 0,
+        rejectedPatients: rejectedPatients || 0,
+        approvedDrivers: approvedDrivers || 0,
+        rejectedDrivers: rejectedDrivers || 0,
+        ridesThisMonth: 0, // TODO: Add date filter
+        activeRides: 0 // TODO: Add status filter
+      });
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    fetchStats();
+
+    // Set up real-time subscriptions
+    const channel = supabase
+      .channel('admin-dashboard')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'profiles'
+      }, () => {
+        fetchStats();
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'rides'
+      }, () => {
+        fetchStats();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   return (
     <div className="space-y-6">

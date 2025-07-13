@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,15 +7,64 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Textarea } from "@/components/ui/textarea";
 import { Search, Eye, Check, X, User, Phone, Mail, MapPin, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const PatientManagement = () => {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [rejectionReason, setRejectionReason] = useState("");
+  const [patients, setPatients] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Mock data - substituir por dados reais do Supabase
-  const patients = [
+  // Fetch patients from Supabase
+  const fetchPatients = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(`
+          *,
+          patients(*)
+        `)
+        .eq('user_type', 'patient')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setPatients(data || []);
+    } catch (error) {
+      console.error('Error fetching patients:', error);
+      toast({
+        title: "Erro ao carregar pacientes",
+        description: "Não foi possível carregar a lista de pacientes.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPatients();
+
+    // Set up real-time subscription
+    const channel = supabase
+      .channel('patient-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'profiles',
+        filter: 'user_type=eq.patient'
+      }, () => {
+        fetchPatients();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const mockPatients = [
     {
       id: 1,
       name: "Maria Silva Santos",
@@ -75,14 +124,32 @@ const PatientManagement = () => {
     }
   };
 
-  const handleApprove = (patientId: number) => {
-    toast({
-      title: "Paciente Aprovado",
-      description: "O paciente foi aprovado e notificado por email.",
-    });
+  const handleApprove = async (patientId: string) => {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ status: 'approved' })
+        .eq('id', patientId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Paciente Aprovado",
+        description: "O paciente foi aprovado com sucesso.",
+      });
+      
+      fetchPatients(); // Refresh data
+    } catch (error) {
+      console.error('Error approving patient:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível aprovar o paciente.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleReject = (patientId: number) => {
+  const handleReject = async (patientId: string) => {
     if (!rejectionReason.trim()) {
       toast({
         title: "Erro",
@@ -91,17 +158,39 @@ const PatientManagement = () => {
       });
       return;
     }
-    toast({
-      title: "Paciente Rejeitado",
-      description: "O paciente foi rejeitado e notificado por email.",
-      variant: "destructive",
-    });
-    setRejectionReason("");
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          status: 'rejected',
+          rejection_reason: rejectionReason
+        })
+        .eq('id', patientId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Paciente Rejeitado",
+        description: "O paciente foi rejeitado com sucesso.",
+        variant: "destructive",
+      });
+      
+      setRejectionReason("");
+      fetchPatients(); // Refresh data
+    } catch (error) {
+      console.error('Error rejecting patient:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível rejeitar o paciente.",
+        variant: "destructive",
+      });
+    }
   };
 
   const filteredPatients = patients.filter(patient => {
-    const matchesSearch = patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         patient.cpf.includes(searchTerm);
+    const matchesSearch = patient.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         patient.cpf?.includes(searchTerm);
     const matchesStatus = filterStatus === "all" || patient.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
@@ -167,7 +256,7 @@ const PatientManagement = () => {
                     <User className="h-6 w-6 text-primary" />
                   </div>
                   <div>
-                    <h3 className="font-semibold">{patient.name}</h3>
+                    <h3 className="font-semibold">{patient.full_name}</h3>
                     <p className="text-sm text-gray-600">CPF: {patient.cpf}</p>
                     <div className="flex items-center gap-4 mt-1">
                       <div className="flex items-center gap-1 text-sm text-gray-600">
@@ -176,7 +265,7 @@ const PatientManagement = () => {
                       </div>
                       <div className="flex items-center gap-1 text-sm text-gray-600">
                         <CreditCard className="h-3 w-3" />
-                        SUS: {patient.susCard}
+                        SUS: {patient.patients?.[0]?.sus_card}
                       </div>
                     </div>
                   </div>
@@ -200,7 +289,7 @@ const PatientManagement = () => {
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <label className="text-sm font-medium">Nome Completo</label>
-                            <p className="text-sm text-gray-600">{patient.name}</p>
+                            <p className="text-sm text-gray-600">{patient.full_name}</p>
                           </div>
                           <div>
                             <label className="text-sm font-medium">CPF</label>
@@ -216,20 +305,30 @@ const PatientManagement = () => {
                           </div>
                           <div className="col-span-2">
                             <label className="text-sm font-medium">Endereço</label>
-                            <p className="text-sm text-gray-600">{patient.address}</p>
+                            <p className="text-sm text-gray-600">
+                              {`${patient.street}, ${patient.number} - ${patient.neighborhood}, ${patient.city} - ${patient.state}`}
+                            </p>
                           </div>
                           <div>
                             <label className="text-sm font-medium">Cartão SUS</label>
-                            <p className="text-sm text-gray-600">{patient.susCard}</p>
+                            <p className="text-sm text-gray-600">{patient.patients?.[0]?.sus_card}</p>
                           </div>
                           <div>
                             <label className="text-sm font-medium">Data de Cadastro</label>
-                            <p className="text-sm text-gray-600">{patient.registrationDate}</p>
+                            <p className="text-sm text-gray-600">
+                              {new Date(patient.created_at).toLocaleDateString('pt-BR')}
+                            </p>
                           </div>
-                          {patient.hasDependency && (
+                          {patient.patients?.[0]?.special_needs && (
                             <div className="col-span-2">
                               <label className="text-sm font-medium">Necessidades Especiais</label>
-                              <p className="text-sm text-gray-600">{patient.dependencyDescription}</p>
+                              <p className="text-sm text-gray-600">{patient.patients[0].special_needs}</p>
+                            </div>
+                          )}
+                          {patient.rejection_reason && (
+                            <div className="col-span-2">
+                              <label className="text-sm font-medium">Motivo da Rejeição</label>
+                              <p className="text-sm text-red-600">{patient.rejection_reason}</p>
                             </div>
                           )}
                         </div>

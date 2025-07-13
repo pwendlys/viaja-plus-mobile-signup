@@ -8,11 +8,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import AddressForm from "@/components/AddressForm";
 import FileUpload from "@/components/FileUpload";
 
 const PatientRegister = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+  
   const [formData, setFormData] = useState({
     fullName: "",
     birthDate: "",
@@ -58,10 +63,94 @@ const PatientRegister = () => {
     return cleanValue.replace(/(\d{2})(\d{4,5})(\d{4})/, "($1) $2-$3");
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const uploadFile = async (file: File, bucket: string, folder: string) => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random()}.${fileExt}`;
+    const filePath = `${folder}/${fileName}`;
+
+    const { error } = await supabase.storage
+      .from(bucket)
+      .upload(filePath, file);
+
+    if (error) throw error;
+    return filePath;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Patient registration data:", { formData, address, files });
-    navigate("/success", { state: { userType: "patient" } });
+    setLoading(true);
+
+    try {
+      // Upload files
+      let profilePhotoUrl = "";
+      let residenceProofUrl = "";
+
+      if (files.profilePhoto.length > 0) {
+        profilePhotoUrl = await uploadFile(files.profilePhoto[0], 'profile-photos', 'patients');
+      }
+
+      if (files.residenceProof.length > 0) {
+        residenceProofUrl = await uploadFile(files.residenceProof[0], 'residence-proofs', 'patients');
+      }
+
+      // Generate UUID for the profile
+      const profileId = crypto.randomUUID();
+
+      // Create profile
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: profileId,
+          full_name: formData.fullName,
+          cpf: formData.cpf.replace(/\D/g, ''),
+          phone: formData.phone.replace(/\D/g, ''),
+          email: formData.email || "",
+          birth_date: formData.birthDate,
+          rg: formData.rg || null,
+          street: address.street,
+          number: address.number,
+          complement: address.complement || null,
+          neighborhood: address.neighborhood,
+          city: address.city,
+          state: address.state,
+          cep: address.cep.replace(/\D/g, ''),
+          user_type: 'patient',
+          profile_photo: profilePhotoUrl,
+          residence_proof: residenceProofUrl,
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (profileError) throw profileError;
+
+      // Create patient record
+      const { error: patientError } = await supabase
+        .from('patients')
+        .insert({
+          id: profile.id,
+          sus_card: formData.susNumber,
+          special_needs: formData.specialNeeds || null
+        });
+
+      if (patientError) throw patientError;
+
+      toast({
+        title: "Cadastro enviado com sucesso!",
+        description: "Aguarde a aprovação da prefeitura.",
+      });
+
+      navigate("/success", { state: { userType: "patient" } });
+    } catch (error: any) {
+      console.error('Error registering patient:', error);
+      toast({
+        title: "Erro no cadastro",
+        description: error.message || "Ocorreu um erro ao enviar o cadastro.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -255,9 +344,9 @@ const PatientRegister = () => {
               <Button
                 type="submit"
                 className="w-full h-12 viaja-gradient text-white text-lg font-semibold rounded-lg hover:opacity-90 transition-opacity"
-                disabled={!formData.acceptTerms}
+                disabled={!formData.acceptTerms || loading}
               >
-                Enviar para Aprovação da Prefeitura
+                {loading ? "Enviando..." : "Enviar para Aprovação da Prefeitura"}
               </Button>
             </form>
           </CardContent>
