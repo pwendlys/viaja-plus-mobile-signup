@@ -24,7 +24,7 @@ const DriverRegister = () => {
     rg: "",
     phone: "",
     email: "",
-    susNumber: "",
+    
     cnhNumber: "",
     vehicleMake: "",
     vehicleModel: "",
@@ -265,27 +265,15 @@ const DriverRegister = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="rg">RG *</Label>
-                      <Input
-                        id="rg"
-                        value={formData.rg}
-                        onChange={(e) => handleInputChange("rg", e.target.value)}
-                        className="h-12 rounded-lg"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="susNumber">Número do Cartão SUS *</Label>
-                      <Input
-                        id="susNumber"
-                        value={formData.susNumber}
-                        onChange={(e) => handleInputChange("susNumber", e.target.value)}
-                        className="h-12 rounded-lg"
-                        required
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="rg">RG *</Label>
+                    <Input
+                      id="rg"
+                      value={formData.rg}
+                      onChange={(e) => handleInputChange("rg", e.target.value)}
+                      className="h-12 rounded-lg"
+                      required
+                    />
                   </div>
                 </div>
               </div>

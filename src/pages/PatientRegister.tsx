@@ -42,7 +42,9 @@ const PatientRegister = () => {
 
   const [files, setFiles] = useState({
     profilePhoto: [] as File[],
-    residenceProof: [] as File[]
+    residenceProof: [] as File[],
+    identityFront: [] as File[],
+    identityBack: [] as File[]
   });
 
   const handleInputChange = (field: string, value: string | boolean) => {
@@ -84,6 +86,8 @@ const PatientRegister = () => {
       // Upload files
       let profilePhotoUrl = "";
       let residenceProofUrl = "";
+      let identityFrontUrl = "";
+      let identityBackUrl = "";
 
       if (files.profilePhoto.length > 0) {
         profilePhotoUrl = await uploadFile(files.profilePhoto[0], 'profile-photos', 'patients');
@@ -91,6 +95,14 @@ const PatientRegister = () => {
 
       if (files.residenceProof.length > 0) {
         residenceProofUrl = await uploadFile(files.residenceProof[0], 'residence-proofs', 'patients');
+      }
+
+      if (files.identityFront.length > 0) {
+        identityFrontUrl = await uploadFile(files.identityFront[0], 'documents', 'patients');
+      }
+
+      if (files.identityBack.length > 0) {
+        identityBackUrl = await uploadFile(files.identityBack[0], 'documents', 'patients');
       }
 
       // Generate UUID for the profile
@@ -300,6 +312,22 @@ const PatientRegister = () => {
                     required
                     onFileChange={(files) => handleFileChange("profilePhoto", files)}
                   />
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FileUpload
+                      label="Identidade ou CNH - Frente"
+                      accept="image/*"
+                      required
+                      onFileChange={(files) => handleFileChange("identityFront", files)}
+                    />
+
+                    <FileUpload
+                      label="Identidade ou CNH - Verso"
+                      accept="image/*"
+                      required
+                      onFileChange={(files) => handleFileChange("identityBack", files)}
+                    />
+                  </div>
 
                   <FileUpload
                     label="Comprovante de Residência"
