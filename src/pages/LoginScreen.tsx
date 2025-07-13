@@ -20,7 +20,14 @@ const LoginScreen = () => {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implementar lógica de login com Supabase
+    
+    // Verificar se é login do admin
+    if (credentials.email === "adm@adm.com" && credentials.password === "adm@2025") {
+      navigate("/admin/dashboard");
+      return;
+    }
+    
+    // TODO: Implementar lógica de login com Supabase para usuários normais
     console.log("Login attempt:", credentials);
   };
 
