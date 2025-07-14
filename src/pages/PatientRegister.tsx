@@ -5,8 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Users } from "lucide-react";
+import { ArrowLeft, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -25,7 +24,12 @@ const PatientRegister = () => {
     rg: "",
     phone: "",
     email: "",
-    susNumber: "",
+    password: "",
+    confirmPassword: "",
+    
+    susCard: "",
+    hasDependency: false,
+    dependencyDescription: "",
     specialNeeds: "",
     acceptTerms: false
   });
@@ -43,8 +47,7 @@ const PatientRegister = () => {
   const [files, setFiles] = useState({
     profilePhoto: [] as File[],
     residenceProof: [] as File[],
-    identityFront: [] as File[],
-    identityBack: [] as File[]
+    identityDocument: [] as File[]
   });
 
   const handleInputChange = (field: string, value: string | boolean) => {
@@ -65,305 +68,129 @@ const PatientRegister = () => {
     return cleanValue.replace(/(\d{2})(\d{4,5})(\d{4})/, "($1) $2-$3");
   };
 
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  const validateForm = () => {
-    console.log('Validating form data:', formData);
-    
-    // Validação de campos obrigatórios
-    if (!formData.fullName.trim()) {
-      toast({
-        title: "Campo obrigatório",
-        description: "Nome completo é obrigatório.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    if (!formData.email.trim()) {
-      toast({
-        title: "Campo obrigatório",
-        description: "E-mail é obrigatório.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    if (!validateEmail(formData.email)) {
-      toast({
-        title: "E-mail inválido",
-        description: "Por favor, insira um e-mail válido.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    if (!formData.cpf.trim()) {
-      toast({
-        title: "Campo obrigatório",
-        description: "CPF é obrigatório.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    if (!formData.phone.trim()) {
-      toast({
-        title: "Campo obrigatório",
-        description: "Telefone é obrigatório.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    if (!formData.birthDate) {
-      toast({
-        title: "Campo obrigatório",
-        description: "Data de nascimento é obrigatória.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    if (!formData.susNumber.trim()) {
-      toast({
-        title: "Campo obrigatório",
-        description: "Número do Cartão SUS é obrigatório.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    // Validação de endereço
-    if (!address.cep.trim() || !address.street.trim() || !address.number.trim() || 
-        !address.neighborhood.trim() || !address.city.trim() || !address.state.trim()) {
-      toast({
-        title: "Endereço incompleto",
-        description: "Todos os campos de endereço são obrigatórios.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    // Validação de documentos
-    if (files.profilePhoto.length === 0) {
-      toast({
-        title: "Documento obrigatório",
-        description: "Foto do perfil é obrigatória.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    if (files.identityFront.length === 0 || files.identityBack.length === 0) {
-      toast({
-        title: "Documentos obrigatórios",
-        description: "Fotos da identidade (frente e verso) são obrigatórias.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    if (files.residenceProof.length === 0) {
-      toast({
-        title: "Documento obrigatório",
-        description: "Comprovante de residência é obrigatório.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    if (!formData.acceptTerms) {
-      toast({
-        title: "Termos não aceitos",
-        description: "Você deve aceitar os termos de uso para continuar.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    return true;
-  };
-
   const uploadFile = async (file: File, bucket: string, folder: string) => {
-    try {
-      console.log(`Uploading file to bucket: ${bucket}, folder: ${folder}`);
-      
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `${folder}/${fileName}`;
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random()}.${fileExt}`;
+    const filePath = `${folder}/${fileName}`;
 
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false
-        });
+    const { error } = await supabase.storage
+      .from(bucket)
+      .upload(filePath, file);
 
-      if (error) {
-        console.error('Upload error:', error);
-        throw new Error(`Erro no upload: ${error.message}`);
-      }
-
-      console.log('File uploaded successfully:', data);
-      return filePath;
-    } catch (error) {
-      console.error('Error in uploadFile:', error);
-      throw error;
-    }
+    if (error) throw error;
+    return filePath;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    console.log('Form submission started');
-    
-    if (!validateForm()) {
+    if (formData.password !== formData.confirmPassword) {
+      toast({
+        title: "Erro",
+        description: "As senhas não coincidem.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      toast({
+        title: "Erro",
+        description: "A senha deve ter pelo menos 6 caracteres.",
+        variant: "destructive",
+      });
       return;
     }
 
     setLoading(true);
 
     try {
-      console.log('Starting file uploads...');
-      
-      // Upload files com tratamento de erro melhorado
+      // Upload files
       let profilePhotoUrl = "";
       let residenceProofUrl = "";
-      let identityFrontUrl = "";
-      let identityBackUrl = "";
+      let identityDocumentUrl = "";
 
-      // Upload profile photo
       if (files.profilePhoto.length > 0) {
-        try {
-          profilePhotoUrl = await uploadFile(files.profilePhoto[0], 'profile-photos', 'patients');
-          console.log('Profile photo uploaded:', profilePhotoUrl);
-        } catch (error) {
-          console.error('Error uploading profile photo:', error);
-          throw new Error('Erro ao fazer upload da foto do perfil');
-        }
+        profilePhotoUrl = await uploadFile(files.profilePhoto[0], 'profile-photos', 'patients');
       }
-
-      // Upload residence proof
       if (files.residenceProof.length > 0) {
-        try {
-          residenceProofUrl = await uploadFile(files.residenceProof[0], 'residence-proofs', 'patients');
-          console.log('Residence proof uploaded:', residenceProofUrl);
-        } catch (error) {
-          console.error('Error uploading residence proof:', error);
-          throw new Error('Erro ao fazer upload do comprovante de residência');
-        }
+        residenceProofUrl = await uploadFile(files.residenceProof[0], 'residence-proofs', 'patients');
+      }
+      if (files.identityDocument.length > 0) {
+        identityDocumentUrl = await uploadFile(files.identityDocument[0], 'documents', 'patients');
       }
 
-      // Upload identity documents
-      if (files.identityFront.length > 0) {
-        try {
-          identityFrontUrl = await uploadFile(files.identityFront[0], 'documents', 'patients');
-          console.log('Identity front uploaded:', identityFrontUrl);
-        } catch (error) {
-          console.error('Error uploading identity front:', error);
-          throw new Error('Erro ao fazer upload da identidade (frente)');
+      // Create user account
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+          data: {
+            full_name: formData.fullName,
+            user_type: 'patient'
+          }
         }
+      });
+
+      if (authError) throw authError;
+
+      if (!authData.user) {
+        throw new Error("Falha na criação do usuário");
       }
 
-      if (files.identityBack.length > 0) {
-        try {
-          identityBackUrl = await uploadFile(files.identityBack[0], 'documents', 'patients');
-          console.log('Identity back uploaded:', identityBackUrl);
-        } catch (error) {
-          console.error('Error uploading identity back:', error);
-          throw new Error('Erro ao fazer upload da identidade (verso)');
-        }
-      }
-
-      console.log('All files uploaded successfully');
-      console.log('Creating profile...');
-
-      // Gerar UUID para o perfil
-      const profileId = crypto.randomUUID();
-
-      // Criar perfil
-      const profileData = {
-        id: profileId,
-        full_name: formData.fullName.trim(),
-        cpf: formData.cpf.replace(/\D/g, ''),
-        phone: formData.phone.replace(/\D/g, ''),
-        email: formData.email.trim(),
-        birth_date: formData.birthDate,
-        rg: formData.rg.trim() || null,
-        street: address.street.trim(),
-        number: address.number.trim(),
-        complement: address.complement.trim() || null,
-        neighborhood: address.neighborhood.trim(),
-        city: address.city.trim(),
-        state: address.state.trim(),
-        cep: address.cep.replace(/\D/g, ''),
-        user_type: 'patient',
-        profile_photo: profilePhotoUrl,
-        residence_proof: residenceProofUrl,
-        status: 'pending',
-        is_active: true
-      };
-
-      console.log('Profile data:', profileData);
-
+      // Create profile
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .insert(profileData)
+        .insert({
+          id: authData.user.id,
+          full_name: formData.fullName,
+          cpf: formData.cpf.replace(/\D/g, ''),
+          phone: formData.phone.replace(/\D/g, ''),
+          email: formData.email,
+          birth_date: formData.birthDate,
+          rg: formData.rg,
+          street: address.street,
+          number: address.number,
+          complement: address.complement || null,
+          neighborhood: address.neighborhood,
+          city: address.city,
+          state: address.state,
+          cep: address.cep.replace(/\D/g, ''),
+          user_type: 'patient',
+          profile_photo: profilePhotoUrl,
+          residence_proof: residenceProofUrl,
+          status: 'pending'
+        })
         .select()
         .single();
 
-      if (profileError) {
-        console.error('Profile creation error:', profileError);
-        throw new Error(`Erro ao criar perfil: ${profileError.message}`);
-      }
+      if (profileError) throw profileError;
 
-      console.log('Profile created successfully:', profile);
-      console.log('Creating patient record...');
-
-      // Criar registro de paciente
-      const patientData = {
-        id: profile.id,
-        sus_card: formData.susNumber.trim(),
-        special_needs: formData.specialNeeds.trim() || null
-      };
-
-      console.log('Patient data:', patientData);
-
+      // Create patient record
       const { error: patientError } = await supabase
         .from('patients')
-        .insert(patientData);
+        .insert({
+          id: profile.id,
+          sus_card: formData.susCard,
+          has_dependency: formData.hasDependency,
+          dependency_description: formData.hasDependency ? formData.dependencyDescription : null,
+          special_needs: formData.specialNeeds || null
+        });
 
-      if (patientError) {
-        console.error('Patient creation error:', patientError);
-        throw new Error(`Erro ao criar registro de paciente: ${patientError.message}`);
-      }
-
-      console.log('Patient created successfully');
+      if (patientError) throw patientError;
 
       toast({
         title: "Cadastro enviado com sucesso!",
-        description: "Aguarde a aprovação da prefeitura para acessar o sistema.",
+        description: "Verifique seu e-mail para confirmar a conta. Aguarde a aprovação da prefeitura.",
       });
 
       navigate("/success", { state: { userType: "patient" } });
     } catch (error: any) {
-      console.error('Registration error:', error);
-      
-      let errorMessage = "Ocorreu um erro ao enviar o cadastro. Tente novamente.";
-      
-      if (error.message) {
-        errorMessage = error.message;
-      } else if (typeof error === 'string') {
-        errorMessage = error;
-      }
-
+      console.error('Error registering patient:', error);
       toast({
         title: "Erro no cadastro",
-        description: errorMessage,
+        description: error.message || "Ocorreu um erro ao enviar o cadastro.",
         variant: "destructive",
       });
     } finally {
@@ -392,13 +219,13 @@ const PatientRegister = () => {
         <Card className="shadow-xl border-0">
           <CardHeader className="text-center pb-6">
             <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Users className="w-8 h-8 text-viaja-blue" />
+              <User className="w-8 h-8 text-viaja-blue" />
             </div>
             <CardTitle className="text-2xl font-bold text-gray-800">
               Cadastro de Paciente
             </CardTitle>
             <p className="text-gray-600">
-              Preencha seus dados para solicitar transporte médico
+              Preencha seus dados para utilizar o transporte médico
             </p>
           </CardHeader>
 
@@ -446,26 +273,15 @@ const PatientRegister = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="rg">RG (recomendado)</Label>
-                      <Input
-                        id="rg"
-                        value={formData.rg}
-                        onChange={(e) => handleInputChange("rg", e.target.value)}
-                        className="h-12 rounded-lg"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="susNumber">Número do Cartão SUS *</Label>
-                      <Input
-                        id="susNumber"
-                        value={formData.susNumber}
-                        onChange={(e) => handleInputChange("susNumber", e.target.value)}
-                        className="h-12 rounded-lg"
-                        required
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="rg">RG *</Label>
+                    <Input
+                      id="rg"
+                      value={formData.rg}
+                      onChange={(e) => handleInputChange("rg", e.target.value)}
+                      className="h-12 rounded-lg"
+                      required
+                    />
                   </div>
                 </div>
               </div>
@@ -496,8 +312,42 @@ const PatientRegister = () => {
                       value={formData.email}
                       onChange={(e) => handleInputChange("email", e.target.value)}
                       className="h-12 rounded-lg"
-                      placeholder="seu@email.com"
                       required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Senha */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Senha de Acesso</h3>
+                
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Senha *</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) => handleInputChange("password", e.target.value)}
+                      placeholder="Digite sua senha (mínimo 6 caracteres)"
+                      className="h-12 rounded-lg"
+                      required
+                      minLength={6}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmPassword">Confirmar Senha *</Label>
+                    <Input
+                      id="confirmPassword"
+                      type="password"
+                      value={formData.confirmPassword}
+                      onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
+                      placeholder="Digite novamente sua senha"
+                      className="h-12 rounded-lg"
+                      required
+                      minLength={6}
                     />
                   </div>
                 </div>
@@ -507,6 +357,59 @@ const PatientRegister = () => {
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Endereço</h3>
                 <AddressForm address={address} onAddressChange={setAddress} />
+              </div>
+
+              {/* Dados Médicos */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Dados Médicos</h3>
+                
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="susCard">Número do Cartão SUS *</Label>
+                    <Input
+                      id="susCard"
+                      value={formData.susCard}
+                      onChange={(e) => handleInputChange("susCard", e.target.value)}
+                      className="h-12 rounded-lg"
+                      required
+                    />
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="hasDependency"
+                      checked={formData.hasDependency}
+                      onCheckedChange={(checked) => handleInputChange("hasDependency", checked as boolean)}
+                    />
+                    <Label htmlFor="hasDependency">
+                      Possui alguma dependência ou limitação de mobilidade
+                    </Label>
+                  </div>
+
+                  {formData.hasDependency && (
+                    <div className="space-y-2">
+                      <Label htmlFor="dependencyDescription">Descreva a dependência/limitação *</Label>
+                      <Input
+                        id="dependencyDescription"
+                        value={formData.dependencyDescription}
+                        onChange={(e) => handleInputChange("dependencyDescription", e.target.value)}
+                        className="h-12 rounded-lg"
+                        required={formData.hasDependency}
+                      />
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="specialNeeds">Necessidades Especiais (opcional)</Label>
+                    <Input
+                      id="specialNeeds"
+                      value={formData.specialNeeds}
+                      onChange={(e) => handleInputChange("specialNeeds", e.target.value)}
+                      placeholder="Ex: cadeira de rodas, acompanhante, etc."
+                      className="h-12 rounded-lg"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Documentos */}
@@ -521,45 +424,18 @@ const PatientRegister = () => {
                     onFileChange={(files) => handleFileChange("profilePhoto", files)}
                   />
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <FileUpload
-                      label="Identidade ou CNH - Frente"
-                      accept="image/*"
-                      required
-                      onFileChange={(files) => handleFileChange("identityFront", files)}
-                    />
-
-                    <FileUpload
-                      label="Identidade ou CNH - Verso"
-                      accept="image/*"
-                      required
-                      onFileChange={(files) => handleFileChange("identityBack", files)}
-                    />
-                  </div>
-
                   <FileUpload
                     label="Comprovante de Residência"
                     accept="image/*,.pdf"
                     required
                     onFileChange={(files) => handleFileChange("residenceProof", files)}
                   />
-                </div>
-              </div>
 
-              {/* Necessidades Especiais */}
-              <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Informações Adicionais</h3>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="specialNeeds">
-                    Necessidades especiais ou observações médicas (opcional)
-                  </Label>
-                  <Textarea
-                    id="specialNeeds"
-                    value={formData.specialNeeds}
-                    onChange={(e) => handleInputChange("specialNeeds", e.target.value)}
-                    placeholder="Descreva qualquer necessidade especial, dificuldade de locomoção, etc."
-                    className="min-h-24 rounded-lg"
+                  <FileUpload
+                    label="Documento de Identidade (RG ou CNH)"
+                    accept="image/*,.pdf"
+                    required
+                    onFileChange={(files) => handleFileChange("identityDocument", files)}
                   />
                 </div>
               </div>

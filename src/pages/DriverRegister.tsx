@@ -24,6 +24,8 @@ const DriverRegister = () => {
     rg: "",
     phone: "",
     email: "",
+    password: "",
+    confirmPassword: "",
     
     cnhNumber: "",
     vehicleMake: "",
@@ -87,6 +89,25 @@ const DriverRegister = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (formData.password !== formData.confirmPassword) {
+      toast({
+        title: "Erro",
+        description: "As senhas não coincidem.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      toast({
+        title: "Erro",
+        description: "A senha deve ter pelo menos 6 caracteres.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -121,14 +142,30 @@ const DriverRegister = () => {
         selfieUrl = await uploadFile(files.selfieWithDocument[0], 'documents', 'drivers');
       }
 
-      // Generate UUID for the profile
-      const profileId = crypto.randomUUID();
+      // Create user account
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+          data: {
+            full_name: formData.fullName,
+            user_type: 'driver'
+          }
+        }
+      });
+
+      if (authError) throw authError;
+
+      if (!authData.user) {
+        throw new Error("Falha na criação do usuário");
+      }
 
       // Create profile
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .insert({
-          id: profileId,
+          id: authData.user.id,
           full_name: formData.fullName,
           cpf: formData.cpf.replace(/\D/g, ''),
           phone: formData.phone.replace(/\D/g, ''),
@@ -174,7 +211,7 @@ const DriverRegister = () => {
 
       toast({
         title: "Cadastro enviado com sucesso!",
-        description: "Aguarde a aprovação da prefeitura.",
+        description: "Verifique seu e-mail para confirmar a conta. Aguarde a aprovação da prefeitura.",
       });
 
       navigate("/success", { state: { userType: "driver" } });
@@ -305,6 +342,41 @@ const DriverRegister = () => {
                       onChange={(e) => handleInputChange("email", e.target.value)}
                       className="h-12 rounded-lg"
                       required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Senha */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Senha de Acesso</h3>
+                
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Senha *</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) => handleInputChange("password", e.target.value)}
+                      placeholder="Digite sua senha (mínimo 6 caracteres)"
+                      className="h-12 rounded-lg"
+                      required
+                      minLength={6}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmPassword">Confirmar Senha *</Label>
+                    <Input
+                      id="confirmPassword"
+                      type="password"
+                      value={formData.confirmPassword}
+                      onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
+                      placeholder="Digite novamente sua senha"
+                      className="h-12 rounded-lg"
+                      required
+                      minLength={6}
                     />
                   </div>
                 </div>

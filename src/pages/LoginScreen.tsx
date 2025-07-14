@@ -6,19 +6,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const LoginScreen = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [credentials, setCredentials] = useState({
     email: "",
     password: ""
   });
+  const [loading, setLoading] = useState(false);
 
   const handleInputChange = (field: string, value: string) => {
     setCredentials(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Verificar se é login do admin
@@ -27,8 +31,94 @@ const LoginScreen = () => {
       return;
     }
     
-    // TODO: Implementar lógica de login com Supabase para usuários normais
-    console.log("Login attempt:", credentials);
+    setLoading(true);
+
+    try {
+      // Tentar fazer login com Supabase
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: credentials.email,
+        password: credentials.password,
+      });
+
+      if (error) {
+        if (error.message === "Invalid login credentials") {
+          toast({
+            title: "Erro de Login",
+            description: "E-mail ou senha incorretos.",
+            variant: "destructive",
+          });
+        } else if (error.message === "Email not confirmed") {
+          toast({
+            title: "E-mail não confirmado",
+            description: "Verifique sua caixa de entrada e confirme seu e-mail antes de fazer login.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Erro de Login",
+            description: error.message,
+            variant: "destructive",
+          });
+        }
+        return;
+      }
+
+      if (data.user) {
+        // Buscar perfil do usuário para verificar tipo e status
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('user_type, status')
+          .eq('id', data.user.id)
+          .single();
+
+        if (profileError) {
+          toast({
+            title: "Erro",
+            description: "Erro ao carregar dados do usuário.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Verificar se o perfil foi aprovado
+        if (profile.status !== 'approved') {
+          toast({
+            title: "Conta Pendente",
+            description: "Sua conta ainda está aguardando aprovação da prefeitura.",
+            variant: "destructive",
+          });
+          await supabase.auth.signOut();
+          return;
+        }
+
+        // Redirecionar baseado no tipo de usuário
+        if (profile.user_type === 'patient') {
+          navigate("/patient");
+        } else if (profile.user_type === 'driver') {
+          navigate("/driver");
+        } else {
+          toast({
+            title: "Erro",
+            description: "Tipo de usuário não reconhecido.",
+            variant: "destructive",
+          });
+        }
+
+        toast({
+          title: "Login realizado com sucesso!",
+          description: `Bem-vindo(a) ao Viaja+ JF!`,
+        });
+      }
+    } catch (error: any) {
+      console.error("Login error:", error);
+      toast({
+        title: "Erro de Login",
+        description: "Ocorreu um erro inesperado. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -62,11 +152,11 @@ const LoginScreen = () => {
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="email">CPF ou E-mail</Label>
+                <Label htmlFor="email">E-mail</Label>
                 <Input
                   id="email"
-                  type="text"
-                  placeholder="Digite seu CPF ou e-mail"
+                  type="email"
+                  placeholder="Digite seu e-mail"
                   value={credentials.email}
                   onChange={(e) => handleInputChange("email", e.target.value)}
                   className="h-12 rounded-lg"
@@ -90,8 +180,9 @@ const LoginScreen = () => {
               <Button
                 type="submit"
                 className="w-full h-12 viaja-gradient text-white text-lg font-semibold rounded-lg hover:opacity-90 transition-opacity"
+                disabled={loading}
               >
-                Entrar
+                {loading ? "Entrando..." : "Entrar"}
               </Button>
             </form>
 
