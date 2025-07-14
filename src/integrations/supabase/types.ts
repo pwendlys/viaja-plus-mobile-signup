@@ -46,6 +46,8 @@ export type Database = {
           cnh_back_photo: string | null
           cnh_front_photo: string | null
           cnh_number: string
+          custom_price_per_km: number | null
+          has_accessibility: boolean | null
           id: string
           selfie_with_document: string | null
           vehicle_color: string
@@ -60,6 +62,8 @@ export type Database = {
           cnh_back_photo?: string | null
           cnh_front_photo?: string | null
           cnh_number: string
+          custom_price_per_km?: number | null
+          has_accessibility?: boolean | null
           id: string
           selfie_with_document?: string | null
           vehicle_color: string
@@ -74,6 +78,8 @@ export type Database = {
           cnh_back_photo?: string | null
           cnh_front_photo?: string | null
           cnh_number?: string
+          custom_price_per_km?: number | null
+          has_accessibility?: boolean | null
           id?: string
           selfie_with_document?: string | null
           vehicle_color?: string
@@ -93,6 +99,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      km_pricing: {
+        Row: {
+          car_type: string
+          created_at: string
+          id: string
+          price_per_km: number
+          updated_at: string
+        }
+        Insert: {
+          car_type: string
+          created_at?: string
+          id?: string
+          price_per_km: number
+          updated_at?: string
+        }
+        Update: {
+          car_type?: string
+          created_at?: string
+          id?: string
+          price_per_km?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       notifications: {
         Row: {
