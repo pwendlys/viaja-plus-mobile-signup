@@ -17,22 +17,41 @@ const PatientManagement = () => {
   const [patients, setPatients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch patients from Supabase
+  // Fetch patients from Supabase with proper joins
   const fetchPatients = async () => {
     try {
+      console.log('Fetching patients with complete data...');
+      
       const { data, error } = await supabase
         .from('profiles')
         .select(`
           *,
-          patients(*),
+          patients!inner(*),
           drivers(*)
         `)
         .eq('user_type', 'patient')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
       
-      console.log('Fetched patients with drivers data:', data);
+      console.log('Fetched patients data:', data);
+      
+      // Log each patient's data for debugging
+      data?.forEach((patient, index) => {
+        console.log(`Patient ${index + 1}:`, {
+          name: patient.full_name,
+          susCard: patient.patients?.[0]?.sus_card,
+          profilePhoto: patient.profile_photo,
+          residenceProof: patient.residence_proof,
+          driversData: patient.drivers?.[0],
+          cnhFront: patient.drivers?.[0]?.cnh_front_photo,
+          cnhBack: patient.drivers?.[0]?.cnh_back_photo
+        });
+      });
+      
       setPatients(data || []);
     } catch (error) {
       console.error('Error fetching patients:', error);
@@ -58,6 +77,23 @@ const PatientManagement = () => {
         table: 'profiles',
         filter: 'user_type=eq.patient'
       }, () => {
+        console.log('Real-time update detected, refetching data...');
+        fetchPatients();
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'patients'
+      }, () => {
+        console.log('Patients table update detected, refetching data...');
+        fetchPatients();
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'drivers'
+      }, () => {
+        console.log('Drivers table update detected, refetching data...');
         fetchPatients();
       })
       .subscribe();
@@ -144,24 +180,30 @@ const PatientManagement = () => {
     }
   };
 
-  const getDocumentImage = (url: string) => {
-    if (!url) return null;
+  const getDocumentImage = (url: string | null | undefined) => {
+    if (!url) {
+      console.log('No URL provided for document image');
+      return null;
+    }
     
     console.log('Processing image URL:', url);
     
-    // Se a URL já está completa, usar como está
+    // Se a URL já está completa (inclui http), usar como está
     if (url.startsWith('http')) {
+      console.log('URL is already complete:', url);
       return url;
     }
     
     // Construir URL completa para o storage do Supabase
+    const baseUrl = 'https://yftbnwobufytmyrpuuis.supabase.co/storage/v1/object/public';
     let finalUrl;
-    if (url.includes('/')) {
-      // URL já tem o path completo
-      finalUrl = `https://yftbnwobufytmyrpuuis.supabase.co/storage/v1/object/public/user-uploads/${url}`;
+    
+    // Se a URL já contém o bucket, usar como está
+    if (url.includes('user-uploads/') || url.includes('cnh-photos/') || url.includes('profile-photos/') || url.includes('residence-proofs/')) {
+      finalUrl = `${baseUrl}/${url}`;
     } else {
-      // URL é apenas o nome do arquivo, assumir que está na pasta patients
-      finalUrl = `https://yftbnwobufytmyrpuuis.supabase.co/storage/v1/object/public/user-uploads/patients/${url}`;
+      // Assumir que está no bucket user-uploads
+      finalUrl = `${baseUrl}/user-uploads/${url}`;
     }
     
     console.log('Final image URL:', finalUrl);
@@ -174,6 +216,14 @@ const PatientManagement = () => {
     const matchesStatus = filterStatus === "all" || patient.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-lg">Carregando pacientes...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -241,11 +291,11 @@ const PatientManagement = () => {
                         onError={(e) => {
                           console.error('Error loading profile photo:', patient.profile_photo);
                           e.currentTarget.style.display = 'none';
+                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
                         }}
                       />
-                    ) : (
-                      <User className="h-6 w-6 text-primary" />
-                    )}
+                    ) : null}
+                    <User className="h-6 w-6 text-primary" />
                   </div>
                   <div>
                     <h3 className="font-semibold">{patient.full_name}</h3>
@@ -257,7 +307,7 @@ const PatientManagement = () => {
                       </div>
                       <div className="flex items-center gap-1 text-sm text-gray-600">
                         <CreditCard className="h-3 w-3" />
-                        SUS: {patient.patients?.[0]?.sus_card}
+                        SUS: {patient.patients?.[0]?.sus_card || 'Não informado'}
                       </div>
                     </div>
                   </div>
@@ -355,7 +405,9 @@ const PatientManagement = () => {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                               <label className="text-sm font-medium text-gray-700">Cartão SUS</label>
-                              <p className="text-sm text-gray-900">{patient.patients?.[0]?.sus_card}</p>
+                              <p className="text-sm text-gray-900 font-medium">
+                                {patient.patients?.[0]?.sus_card || 'Não informado'}
+                              </p>
                             </div>
                             <div>
                               <label className="text-sm font-medium text-gray-700">Possui Dependência?</label>
@@ -392,13 +444,14 @@ const PatientManagement = () => {
                                   <Camera className="h-4 w-4" />
                                   Foto de Perfil
                                 </label>
-                                <div className="border rounded-lg overflow-hidden">
+                                <div className="border rounded-lg overflow-hidden bg-gray-50">
                                   <img 
                                     src={getDocumentImage(patient.profile_photo)} 
                                     alt="Foto de perfil"
                                     className="w-full h-32 object-cover"
                                     onError={(e) => {
                                       console.error('Error loading profile photo:', patient.profile_photo);
+                                      e.currentTarget.src = '/placeholder.svg';
                                     }}
                                   />
                                   <div className="p-2">
@@ -422,13 +475,14 @@ const PatientManagement = () => {
                                   <IdCard className="h-4 w-4" />
                                   CNH/RG Frente
                                 </label>
-                                <div className="border rounded-lg overflow-hidden">
+                                <div className="border rounded-lg overflow-hidden bg-gray-50">
                                   <img 
                                     src={getDocumentImage(patient.drivers[0].cnh_front_photo)} 
                                     alt="CNH/RG Frente"
                                     className="w-full h-32 object-cover"
                                     onError={(e) => {
                                       console.error('Error loading CNH front photo:', patient.drivers[0].cnh_front_photo);
+                                      e.currentTarget.src = '/placeholder.svg';
                                     }}
                                   />
                                   <div className="p-2">
@@ -452,13 +506,14 @@ const PatientManagement = () => {
                                   <IdCard className="h-4 w-4" />
                                   CNH/RG Verso
                                 </label>
-                                <div className="border rounded-lg overflow-hidden">
+                                <div className="border rounded-lg overflow-hidden bg-gray-50">
                                   <img 
                                     src={getDocumentImage(patient.drivers[0].cnh_back_photo)} 
                                     alt="CNH/RG Verso"
                                     className="w-full h-32 object-cover"
                                     onError={(e) => {
                                       console.error('Error loading CNH back photo:', patient.drivers[0].cnh_back_photo);
+                                      e.currentTarget.src = '/placeholder.svg';
                                     }}
                                   />
                                   <div className="p-2">
@@ -482,13 +537,14 @@ const PatientManagement = () => {
                                   <Home className="h-4 w-4" />
                                   Comprovante de Residência
                                 </label>
-                                <div className="border rounded-lg overflow-hidden">
+                                <div className="border rounded-lg overflow-hidden bg-gray-50">
                                   <img 
                                     src={getDocumentImage(patient.residence_proof)} 
                                     alt="Comprovante de residência"
                                     className="w-full h-32 object-cover"
                                     onError={(e) => {
                                       console.error('Error loading residence proof:', patient.residence_proof);
+                                      e.currentTarget.src = '/placeholder.svg';
                                     }}
                                   />
                                   <div className="p-2">
@@ -505,18 +561,13 @@ const PatientManagement = () => {
                               </div>
                             )}
 
-                            {/* Debug: Mostrar se não há documentos CNH */}
+                            {/* Alerta quando não há documentos CNH */}
                             {!patient.drivers?.[0]?.cnh_front_photo && !patient.drivers?.[0]?.cnh_back_photo && (
-                              <div className="col-span-full p-4 bg-yellow-50 rounded-lg">
+                              <div className="col-span-full p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                                 <p className="text-sm text-yellow-700">
                                   Documentos CNH não encontrados para este paciente.
                                   {patient.drivers?.[0] ? ' Dados do driver existem mas sem fotos CNH.' : ' Dados do driver não encontrados.'}
                                 </p>
-                                {process.env.NODE_ENV === 'development' && (
-                                  <pre className="text-xs mt-2 text-gray-600">
-                                    {JSON.stringify(patient.drivers, null, 2)}
-                                  </pre>
-                                )}
                               </div>
                             )}
                           </div>
