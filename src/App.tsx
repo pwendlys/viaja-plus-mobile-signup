@@ -19,6 +19,7 @@ import RideManagement from "./pages/admin/RideManagement";
 import PricingManagement from "./pages/admin/PricingManagement";
 import Settings from "./pages/admin/Settings";
 import PatientDashboard from "./pages/PatientDashboard";
+import DriverDashboard from "./pages/DriverDashboard";
 
 const queryClient = new QueryClient();
 
@@ -39,6 +40,9 @@ const App = () => (
           
           {/* Patient Dashboard */}
           <Route path="/patient" element={<PatientDashboard />} />
+          
+          {/* Driver Dashboard */}
+          <Route path="/driver" element={<DriverDashboard />} />
           
           {/* Admin Routes */}
           <Route path="/admin" element={<AdminLayout />}>

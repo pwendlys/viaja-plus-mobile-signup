@@ -41,6 +41,85 @@ export type Database = {
         }
         Relationships: []
       }
+      driver_balance: {
+        Row: {
+          available_balance: number
+          driver_id: string
+          id: string
+          total_earned: number
+          total_withdrawn: number
+          updated_at: string
+        }
+        Insert: {
+          available_balance?: number
+          driver_id: string
+          id?: string
+          total_earned?: number
+          total_withdrawn?: number
+          updated_at?: string
+        }
+        Update: {
+          available_balance?: number
+          driver_id?: string
+          id?: string
+          total_earned?: number
+          total_withdrawn?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_balance_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      driver_bank_data: {
+        Row: {
+          account_number: string | null
+          agency: string | null
+          bank_name: string | null
+          created_at: string
+          driver_id: string
+          id: string
+          pix_key: string | null
+          pix_key_type: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_number?: string | null
+          agency?: string | null
+          bank_name?: string | null
+          created_at?: string
+          driver_id: string
+          id?: string
+          pix_key?: string | null
+          pix_key_type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_number?: string | null
+          agency?: string | null
+          bank_name?: string | null
+          created_at?: string
+          driver_id?: string
+          id?: string
+          pix_key?: string | null
+          pix_key_type?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_bank_data_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       driver_ratings: {
         Row: {
           comment: string | null
@@ -284,6 +363,58 @@ export type Database = {
           },
         ]
       }
+      patient_ratings: {
+        Row: {
+          comment: string | null
+          created_at: string
+          driver_id: string
+          id: string
+          patient_id: string
+          rating: number
+          ride_id: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          driver_id: string
+          id?: string
+          patient_id: string
+          rating: number
+          ride_id: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          driver_id?: string
+          id?: string
+          patient_id?: string
+          rating?: number
+          ride_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_ratings_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_ratings_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_ratings_ride_id_fkey"
+            columns: ["ride_id"]
+            isOneToOne: false
+            referencedRelation: "rides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patients: {
         Row: {
           dependency_description: string | null
@@ -463,6 +594,80 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      withdrawal_requests: {
+        Row: {
+          admin_notes: string | null
+          amount: number
+          created_at: string
+          driver_id: string
+          id: string
+          processed_at: string | null
+          requested_at: string
+          status: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          amount: number
+          created_at?: string
+          driver_id: string
+          id?: string
+          processed_at?: string | null
+          requested_at?: string
+          status?: string
+        }
+        Update: {
+          admin_notes?: string | null
+          amount?: number
+          created_at?: string
+          driver_id?: string
+          id?: string
+          processed_at?: string | null
+          requested_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "withdrawal_requests_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      withdrawal_settings: {
+        Row: {
+          created_at: string
+          end_date: string
+          end_time: string
+          id: string
+          is_active: boolean
+          start_date: string
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          end_date: string
+          end_time: string
+          id?: string
+          is_active?: boolean
+          start_date: string
+          start_time: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          end_date?: string
+          end_time?: string
+          id?: string
+          is_active?: boolean
+          start_date?: string
+          start_time?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
     }
     Views: {
