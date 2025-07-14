@@ -41,6 +41,58 @@ export type Database = {
         }
         Relationships: []
       }
+      driver_ratings: {
+        Row: {
+          comment: string | null
+          created_at: string
+          driver_id: string
+          id: string
+          patient_id: string
+          rating: number
+          ride_id: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          driver_id: string
+          id?: string
+          patient_id: string
+          rating: number
+          ride_id: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          driver_id?: string
+          id?: string
+          patient_id?: string
+          rating?: number
+          ride_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_ratings_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_ratings_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_ratings_ride_id_fkey"
+            columns: ["ride_id"]
+            isOneToOne: false
+            referencedRelation: "rides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       drivers: {
         Row: {
           cnh_back_photo: string | null
@@ -100,6 +152,41 @@ export type Database = {
           },
         ]
       }
+      emergency_contacts: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          patient_id: string
+          phone: string
+          relationship: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          patient_id: string
+          phone: string
+          relationship?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          patient_id?: string
+          phone?: string
+          relationship?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emergency_contacts_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       km_pricing: {
         Row: {
           car_type: string
@@ -153,6 +240,44 @@ export type Database = {
           {
             foreignKeyName: "notifications_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patient_favorites: {
+        Row: {
+          address: string
+          created_at: string
+          id: string
+          latitude: number | null
+          longitude: number | null
+          name: string
+          patient_id: string
+        }
+        Insert: {
+          address: string
+          created_at?: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          name: string
+          patient_id: string
+        }
+        Update: {
+          address?: string
+          created_at?: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          name?: string
+          patient_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_favorites_patient_id_fkey"
+            columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -268,38 +393,50 @@ export type Database = {
       }
       rides: {
         Row: {
+          actual_price: number | null
           created_at: string | null
           destination_address: string
           driver_id: string | null
+          estimated_price: number | null
           id: string
           patient_id: string
           pickup_address: string
           pickup_date: string
           pickup_time: string
+          rating_id: string | null
+          scheduled_for: string | null
           status: string | null
           updated_at: string | null
         }
         Insert: {
+          actual_price?: number | null
           created_at?: string | null
           destination_address: string
           driver_id?: string | null
+          estimated_price?: number | null
           id?: string
           patient_id: string
           pickup_address: string
           pickup_date: string
           pickup_time: string
+          rating_id?: string | null
+          scheduled_for?: string | null
           status?: string | null
           updated_at?: string | null
         }
         Update: {
+          actual_price?: number | null
           created_at?: string | null
           destination_address?: string
           driver_id?: string | null
+          estimated_price?: number | null
           id?: string
           patient_id?: string
           pickup_address?: string
           pickup_date?: string
           pickup_time?: string
+          rating_id?: string | null
+          scheduled_for?: string | null
           status?: string | null
           updated_at?: string | null
         }
@@ -316,6 +453,13 @@ export type Database = {
             columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rides_rating_id_fkey"
+            columns: ["rating_id"]
+            isOneToOne: false
+            referencedRelation: "driver_ratings"
             referencedColumns: ["id"]
           },
         ]

@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -19,6 +18,7 @@ import DriverManagement from "./pages/admin/DriverManagement";
 import RideManagement from "./pages/admin/RideManagement";
 import PricingManagement from "./pages/admin/PricingManagement";
 import Settings from "./pages/admin/Settings";
+import PatientDashboard from "./pages/PatientDashboard";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +36,9 @@ const App = () => (
           <Route path="/register/patient" element={<PatientRegister />} />
           <Route path="/register/driver" element={<DriverRegister />} />
           <Route path="/success" element={<RegistrationSuccess />} />
+          
+          {/* Patient Dashboard */}
+          <Route path="/patient" element={<PatientDashboard />} />
           
           {/* Admin Routes */}
           <Route path="/admin" element={<AdminLayout />}>
