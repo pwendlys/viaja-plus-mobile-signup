@@ -65,87 +65,276 @@ const PatientRegister = () => {
     return cleanValue.replace(/(\d{2})(\d{4,5})(\d{4})/, "($1) $2-$3");
   };
 
+  const validateForm = () => {
+    console.log('Validating form data:', formData);
+    
+    if (!formData.fullName.trim()) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Nome completo é obrigatório.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (!formData.email.trim()) {
+      toast({
+        title: "Campo obrigatório",
+        description: "E-mail é obrigatório.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      toast({
+        title: "E-mail inválido",
+        description: "Por favor, insira um e-mail válido.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (!formData.cpf.trim()) {
+      toast({
+        title: "Campo obrigatório",
+        description: "CPF é obrigatório.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (!formData.phone.trim()) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Telefone é obrigatório.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (!formData.birthDate) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Data de nascimento é obrigatória.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (!formData.susNumber.trim()) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Número do Cartão SUS é obrigatório.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (!address.cep.trim() || !address.street.trim() || !address.number.trim() || 
+        !address.neighborhood.trim() || !address.city.trim() || !address.state.trim()) {
+      toast({
+        title: "Endereço incompleto",
+        description: "Todos os campos de endereço são obrigatórios.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (files.profilePhoto.length === 0) {
+      toast({
+        title: "Documento obrigatório",
+        description: "Foto do perfil é obrigatória.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (files.identityFront.length === 0 || files.identityBack.length === 0) {
+      toast({
+        title: "Documentos obrigatórios",
+        description: "Fotos da identidade (frente e verso) são obrigatórias.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (files.residenceProof.length === 0) {
+      toast({
+        title: "Documento obrigatório",
+        description: "Comprovante de residência é obrigatório.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (!formData.acceptTerms) {
+      toast({
+        title: "Termos não aceitos",
+        description: "Você deve aceitar os termos de uso para continuar.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    return true;
+  };
+
   const uploadFile = async (file: File, bucket: string, folder: string) => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Math.random()}.${fileExt}`;
-    const filePath = `${folder}/${fileName}`;
+    try {
+      console.log(`Uploading file to bucket: ${bucket}, folder: ${folder}`);
+      
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `${folder}/${fileName}`;
 
-    const { error } = await supabase.storage
-      .from(bucket)
-      .upload(filePath, file);
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
 
-    if (error) throw error;
-    return filePath;
+      if (error) {
+        console.error('Upload error:', error);
+        throw error;
+      }
+
+      console.log('File uploaded successfully:', data);
+      return filePath;
+    } catch (error) {
+      console.error('Error in uploadFile:', error);
+      throw error;
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    console.log('Form submission started');
+    
+    if (!validateForm()) {
+      return;
+    }
+
     setLoading(true);
 
     try {
-      // Upload files
+      console.log('Starting file uploads...');
+      
+      // Upload files with better error handling
       let profilePhotoUrl = "";
       let residenceProofUrl = "";
       let identityFrontUrl = "";
       let identityBackUrl = "";
 
+      // Upload profile photo
       if (files.profilePhoto.length > 0) {
-        profilePhotoUrl = await uploadFile(files.profilePhoto[0], 'profile-photos', 'patients');
+        try {
+          profilePhotoUrl = await uploadFile(files.profilePhoto[0], 'profile-photos', 'patients');
+          console.log('Profile photo uploaded:', profilePhotoUrl);
+        } catch (error) {
+          console.error('Error uploading profile photo:', error);
+          throw new Error('Erro ao fazer upload da foto do perfil');
+        }
       }
 
+      // Upload residence proof
       if (files.residenceProof.length > 0) {
-        residenceProofUrl = await uploadFile(files.residenceProof[0], 'residence-proofs', 'patients');
+        try {
+          residenceProofUrl = await uploadFile(files.residenceProof[0], 'residence-proofs', 'patients');
+          console.log('Residence proof uploaded:', residenceProofUrl);
+        } catch (error) {
+          console.error('Error uploading residence proof:', error);
+          throw new Error('Erro ao fazer upload do comprovante de residência');
+        }
       }
 
+      // Upload identity documents
       if (files.identityFront.length > 0) {
-        identityFrontUrl = await uploadFile(files.identityFront[0], 'documents', 'patients');
+        try {
+          identityFrontUrl = await uploadFile(files.identityFront[0], 'documents', 'patients');
+          console.log('Identity front uploaded:', identityFrontUrl);
+        } catch (error) {
+          console.error('Error uploading identity front:', error);
+          throw new Error('Erro ao fazer upload da identidade (frente)');
+        }
       }
 
       if (files.identityBack.length > 0) {
-        identityBackUrl = await uploadFile(files.identityBack[0], 'documents', 'patients');
+        try {
+          identityBackUrl = await uploadFile(files.identityBack[0], 'documents', 'patients');
+          console.log('Identity back uploaded:', identityBackUrl);
+        } catch (error) {
+          console.error('Error uploading identity back:', error);
+          throw new Error('Erro ao fazer upload da identidade (verso)');
+        }
       }
+
+      console.log('All files uploaded successfully');
+      console.log('Creating profile...');
 
       // Generate UUID for the profile
       const profileId = crypto.randomUUID();
 
       // Create profile
+      const profileData = {
+        id: profileId,
+        full_name: formData.fullName.trim(),
+        cpf: formData.cpf.replace(/\D/g, ''),
+        phone: formData.phone.replace(/\D/g, ''),
+        email: formData.email.trim(),
+        birth_date: formData.birthDate,
+        rg: formData.rg.trim() || null,
+        street: address.street.trim(),
+        number: address.number.trim(),
+        complement: address.complement.trim() || null,
+        neighborhood: address.neighborhood.trim(),
+        city: address.city.trim(),
+        state: address.state.trim(),
+        cep: address.cep.replace(/\D/g, ''),
+        user_type: 'patient',
+        profile_photo: profilePhotoUrl,
+        residence_proof: residenceProofUrl,
+        status: 'pending'
+      };
+
+      console.log('Profile data:', profileData);
+
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .insert({
-          id: profileId,
-          full_name: formData.fullName,
-          cpf: formData.cpf.replace(/\D/g, ''),
-          phone: formData.phone.replace(/\D/g, ''),
-          email: formData.email || "",
-          birth_date: formData.birthDate,
-          rg: formData.rg || null,
-          street: address.street,
-          number: address.number,
-          complement: address.complement || null,
-          neighborhood: address.neighborhood,
-          city: address.city,
-          state: address.state,
-          cep: address.cep.replace(/\D/g, ''),
-          user_type: 'patient',
-          profile_photo: profilePhotoUrl,
-          residence_proof: residenceProofUrl,
-          status: 'pending'
-        })
+        .insert(profileData)
         .select()
         .single();
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error('Profile creation error:', profileError);
+        throw new Error(`Erro ao criar perfil: ${profileError.message}`);
+      }
+
+      console.log('Profile created successfully:', profile);
+      console.log('Creating patient record...');
 
       // Create patient record
+      const patientData = {
+        id: profile.id,
+        sus_card: formData.susNumber.trim(),
+        special_needs: formData.specialNeeds.trim() || null
+      };
+
+      console.log('Patient data:', patientData);
+
       const { error: patientError } = await supabase
         .from('patients')
-        .insert({
-          id: profile.id,
-          sus_card: formData.susNumber,
-          special_needs: formData.specialNeeds || null
-        });
+        .insert(patientData);
 
-      if (patientError) throw patientError;
+      if (patientError) {
+        console.error('Patient creation error:', patientError);
+        throw new Error(`Erro ao criar registro de paciente: ${patientError.message}`);
+      }
+
+      console.log('Patient created successfully');
 
       toast({
         title: "Cadastro enviado com sucesso!",
@@ -154,10 +343,19 @@ const PatientRegister = () => {
 
       navigate("/success", { state: { userType: "patient" } });
     } catch (error: any) {
-      console.error('Error registering patient:', error);
+      console.error('Registration error:', error);
+      
+      let errorMessage = "Ocorreu um erro ao enviar o cadastro.";
+      
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+
       toast({
         title: "Erro no cadastro",
-        description: error.message || "Ocorreu um erro ao enviar o cadastro.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -283,13 +481,15 @@ const PatientRegister = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="email">E-mail (opcional)</Label>
+                    <Label htmlFor="email">E-mail *</Label>
                     <Input
                       id="email"
                       type="email"
                       value={formData.email}
                       onChange={(e) => handleInputChange("email", e.target.value)}
                       className="h-12 rounded-lg"
+                      placeholder="seu@email.com"
+                      required
                     />
                   </div>
                 </div>
