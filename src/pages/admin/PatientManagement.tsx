@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Eye, Check, X, User, Phone, Mail, MapPin, CreditCard, FileText, Camera, Home, Calendar } from "lucide-react";
+import { Search, Eye, Check, X, User, Phone, Mail, MapPin, CreditCard, FileText, Camera, Home, Calendar, IdCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -25,7 +25,8 @@ const PatientManagement = () => {
         .from('profiles')
         .select(`
           *,
-          patients(*)
+          patients(*),
+          drivers(*)
         `)
         .eq('user_type', 'patient')
         .order('created_at', { ascending: false });
@@ -144,7 +145,9 @@ const PatientManagement = () => {
 
   const getDocumentImage = (url: string) => {
     if (!url) return null;
-    return `https://yftbnwobufytmyrpuuis.supabase.co/storage/v1/object/public/${url}`;
+    // Remove 'patients/' prefix if it exists and construct full URL
+    const cleanUrl = url.startsWith('patients/') ? url : `patients/${url}`;
+    return `https://yftbnwobufytmyrpuuis.supabase.co/storage/v1/object/public/user-uploads/${cleanUrl}`;
   };
 
   const filteredPatients = patients.filter(patient => {
@@ -381,6 +384,60 @@ const PatientManagement = () => {
                                       className="text-xs text-blue-600 hover:underline"
                                     >
                                       Ver em tamanho completo
+                                    </a>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* CNH/RG Frente */}
+                            {patient.drivers?.[0]?.cnh_front_photo && (
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                  <IdCard className="h-4 w-4" />
+                                  CNH/RG Frente
+                                </label>
+                                <div className="border rounded-lg overflow-hidden">
+                                  <img 
+                                    src={getDocumentImage(patient.drivers[0].cnh_front_photo)} 
+                                    alt="CNH/RG Frente"
+                                    className="w-full h-32 object-cover"
+                                  />
+                                  <div className="p-2">
+                                    <a 
+                                      href={getDocumentImage(patient.drivers[0].cnh_front_photo)} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-blue-600 hover:underline"
+                                    >
+                                      Ver documento completo
+                                    </a>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* CNH/RG Verso */}
+                            {patient.drivers?.[0]?.cnh_back_photo && (
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                  <IdCard className="h-4 w-4" />
+                                  CNH/RG Verso
+                                </label>
+                                <div className="border rounded-lg overflow-hidden">
+                                  <img 
+                                    src={getDocumentImage(patient.drivers[0].cnh_back_photo)} 
+                                    alt="CNH/RG Verso"
+                                    className="w-full h-32 object-cover"
+                                  />
+                                  <div className="p-2">
+                                    <a 
+                                      href={getDocumentImage(patient.drivers[0].cnh_back_photo)} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-blue-600 hover:underline"
+                                    >
+                                      Ver documento completo
                                     </a>
                                   </div>
                                 </div>
