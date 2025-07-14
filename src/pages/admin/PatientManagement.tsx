@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -5,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Eye, Check, X, User, Phone, Mail, MapPin, CreditCard } from "lucide-react";
+import { Search, Eye, Check, X, User, Phone, Mail, MapPin, CreditCard, FileText, Camera, Home, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -63,53 +64,6 @@ const PatientManagement = () => {
       supabase.removeChannel(channel);
     };
   }, []);
-
-  const mockPatients = [
-    {
-      id: 1,
-      name: "Maria Silva Santos",
-      cpf: "123.456.789-00",
-      email: "maria@email.com",
-      phone: "(11) 99999-9999",
-      address: "Rua das Flores, 123 - Centro",
-      susCard: "123456789012345",
-      status: "pending",
-      registrationDate: "2024-01-15",
-      profilePhoto: "/placeholder.svg",
-      documents: ["comprovante_residencia.pdf"],
-      hasDependency: false
-    },
-    {
-      id: 2,
-      name: "João Oliveira",
-      cpf: "987.654.321-00",
-      email: "joao@email.com",
-      phone: "(11) 88888-8888",
-      address: "Av. Principal, 456 - Bairro Novo",
-      susCard: "987654321098765",
-      status: "approved",
-      registrationDate: "2024-01-10",
-      profilePhoto: "/placeholder.svg",
-      documents: ["comprovante_residencia.pdf"],
-      hasDependency: true,
-      dependencyDescription: "Cadeirante"
-    },
-    {
-      id: 3,
-      name: "Ana Costa",
-      cpf: "456.789.123-00",
-      email: "ana@email.com",
-      phone: "(11) 77777-7777",
-      address: "Rua da Paz, 789 - Vila Nova",
-      susCard: "456789123456789",
-      status: "rejected",
-      registrationDate: "2024-01-12",
-      profilePhoto: "/placeholder.svg",
-      documents: ["comprovante_residencia.pdf"],
-      hasDependency: false,
-      rejectionReason: "Documentos ilegíveis"
-    }
-  ];
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -188,6 +142,11 @@ const PatientManagement = () => {
     }
   };
 
+  const getDocumentImage = (url: string) => {
+    if (!url) return null;
+    return `https://yftbnwobufytmyrpuuis.supabase.co/storage/v1/object/public/${url}`;
+  };
+
   const filteredPatients = patients.filter(patient => {
     const matchesSearch = patient.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          patient.cpf?.includes(searchTerm);
@@ -252,8 +211,16 @@ const PatientManagement = () => {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                    <User className="h-6 w-6 text-primary" />
+                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center overflow-hidden">
+                    {patient.profile_photo ? (
+                      <img 
+                        src={getDocumentImage(patient.profile_photo)} 
+                        alt="Foto do paciente"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <User className="h-6 w-6 text-primary" />
+                    )}
                   </div>
                   <div>
                     <h3 className="font-semibold">{patient.full_name}</h3>
@@ -281,58 +248,203 @@ const PatientManagement = () => {
                         Ver Detalhes
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="max-w-2xl">
+                    <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>Detalhes do Paciente</DialogTitle>
                       </DialogHeader>
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-6">
+                        {/* Informações Pessoais */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <label className="text-sm font-medium">Nome Completo</label>
-                            <p className="text-sm text-gray-600">{patient.full_name}</p>
+                            <label className="text-sm font-medium text-gray-700">Nome Completo</label>
+                            <p className="text-sm text-gray-900 font-medium">{patient.full_name}</p>
                           </div>
                           <div>
-                            <label className="text-sm font-medium">CPF</label>
-                            <p className="text-sm text-gray-600">{patient.cpf}</p>
+                            <label className="text-sm font-medium text-gray-700">CPF</label>
+                            <p className="text-sm text-gray-900">{patient.cpf}</p>
                           </div>
                           <div>
-                            <label className="text-sm font-medium">Email</label>
-                            <p className="text-sm text-gray-600">{patient.email}</p>
+                            <label className="text-sm font-medium text-gray-700">RG</label>
+                            <p className="text-sm text-gray-900">{patient.rg || 'Não informado'}</p>
                           </div>
                           <div>
-                            <label className="text-sm font-medium">Telefone</label>
-                            <p className="text-sm text-gray-600">{patient.phone}</p>
-                          </div>
-                          <div className="col-span-2">
-                            <label className="text-sm font-medium">Endereço</label>
-                            <p className="text-sm text-gray-600">
-                              {`${patient.street}, ${patient.number} - ${patient.neighborhood}, ${patient.city} - ${patient.state}`}
+                            <label className="text-sm font-medium text-gray-700">Data de Nascimento</label>
+                            <p className="text-sm text-gray-900">
+                              {patient.birth_date ? new Date(patient.birth_date).toLocaleDateString('pt-BR') : 'Não informado'}
                             </p>
                           </div>
                           <div>
-                            <label className="text-sm font-medium">Cartão SUS</label>
-                            <p className="text-sm text-gray-600">{patient.patients?.[0]?.sus_card}</p>
+                            <label className="text-sm font-medium text-gray-700">Email</label>
+                            <p className="text-sm text-gray-900">{patient.email}</p>
                           </div>
                           <div>
-                            <label className="text-sm font-medium">Data de Cadastro</label>
-                            <p className="text-sm text-gray-600">
-                              {new Date(patient.created_at).toLocaleDateString('pt-BR')}
-                            </p>
+                            <label className="text-sm font-medium text-gray-700">Telefone</label>
+                            <p className="text-sm text-gray-900">{patient.phone}</p>
                           </div>
-                          {patient.patients?.[0]?.special_needs && (
-                            <div className="col-span-2">
-                              <label className="text-sm font-medium">Necessidades Especiais</label>
-                              <p className="text-sm text-gray-600">{patient.patients[0].special_needs}</p>
-                            </div>
-                          )}
-                          {patient.rejection_reason && (
-                            <div className="col-span-2">
-                              <label className="text-sm font-medium">Motivo da Rejeição</label>
-                              <p className="text-sm text-red-600">{patient.rejection_reason}</p>
-                            </div>
-                          )}
                         </div>
 
+                        {/* Endereço */}
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <MapPin className="h-5 w-5" />
+                            Endereço
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">CEP</label>
+                              <p className="text-sm text-gray-900">{patient.cep}</p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Rua</label>
+                              <p className="text-sm text-gray-900">{patient.street}</p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Número</label>
+                              <p className="text-sm text-gray-900">{patient.number}</p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Complemento</label>
+                              <p className="text-sm text-gray-900">{patient.complement || 'Não informado'}</p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Bairro</label>
+                              <p className="text-sm text-gray-900">{patient.neighborhood}</p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Cidade</label>
+                              <p className="text-sm text-gray-900">{patient.city}</p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Estado</label>
+                              <p className="text-sm text-gray-900">{patient.state}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Informações Médicas */}
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <CreditCard className="h-5 w-5" />
+                            Informações Médicas
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Cartão SUS</label>
+                              <p className="text-sm text-gray-900">{patient.patients?.[0]?.sus_card}</p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Possui Dependência?</label>
+                              <p className="text-sm text-gray-900">
+                                {patient.patients?.[0]?.has_dependency ? 'Sim' : 'Não'}
+                              </p>
+                            </div>
+                            {patient.patients?.[0]?.dependency_description && (
+                              <div className="md:col-span-2">
+                                <label className="text-sm font-medium text-gray-700">Descrição da Dependência</label>
+                                <p className="text-sm text-gray-900">{patient.patients[0].dependency_description}</p>
+                              </div>
+                            )}
+                            {patient.patients?.[0]?.special_needs && (
+                              <div className="md:col-span-2">
+                                <label className="text-sm font-medium text-gray-700">Necessidades Especiais</label>
+                                <p className="text-sm text-gray-900">{patient.patients[0].special_needs}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Documentos */}
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <FileText className="h-5 w-5" />
+                            Documentos Enviados
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {/* Foto de Perfil */}
+                            {patient.profile_photo && (
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                  <Camera className="h-4 w-4" />
+                                  Foto de Perfil
+                                </label>
+                                <div className="border rounded-lg overflow-hidden">
+                                  <img 
+                                    src={getDocumentImage(patient.profile_photo)} 
+                                    alt="Foto de perfil"
+                                    className="w-full h-32 object-cover"
+                                  />
+                                  <div className="p-2">
+                                    <a 
+                                      href={getDocumentImage(patient.profile_photo)} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-blue-600 hover:underline"
+                                    >
+                                      Ver em tamanho completo
+                                    </a>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Comprovante de Residência */}
+                            {patient.residence_proof && (
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                  <Home className="h-4 w-4" />
+                                  Comprovante de Residência
+                                </label>
+                                <div className="border rounded-lg overflow-hidden">
+                                  <img 
+                                    src={getDocumentImage(patient.residence_proof)} 
+                                    alt="Comprovante de residência"
+                                    className="w-full h-32 object-cover"
+                                  />
+                                  <div className="p-2">
+                                    <a 
+                                      href={getDocumentImage(patient.residence_proof)} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-blue-600 hover:underline"
+                                    >
+                                      Ver documento completo
+                                    </a>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Informações de Cadastro */}
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <Calendar className="h-5 w-5" />
+                            Informações de Cadastro
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Data de Cadastro</label>
+                              <p className="text-sm text-gray-900">
+                                {new Date(patient.created_at).toLocaleDateString('pt-BR')} às {new Date(patient.created_at).toLocaleTimeString('pt-BR')}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Status</label>
+                              <div className="mt-1">
+                                {getStatusBadge(patient.status)}
+                              </div>
+                            </div>
+                            {patient.rejection_reason && (
+                              <div className="md:col-span-2">
+                                <label className="text-sm font-medium text-red-700">Motivo da Rejeição</label>
+                                <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{patient.rejection_reason}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Botões de Ação */}
                         {patient.status === "pending" && (
                           <div className="flex gap-3 pt-4 border-t">
                             <Button 
