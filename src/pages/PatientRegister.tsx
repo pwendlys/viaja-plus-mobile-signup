@@ -65,9 +65,15 @@ const PatientRegister = () => {
     return cleanValue.replace(/(\d{2})(\d{4,5})(\d{4})/, "($1) $2-$3");
   };
 
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
   const validateForm = () => {
     console.log('Validating form data:', formData);
     
+    // Validação de campos obrigatórios
     if (!formData.fullName.trim()) {
       toast({
         title: "Campo obrigatório",
@@ -86,8 +92,7 @@ const PatientRegister = () => {
       return false;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
+    if (!validateEmail(formData.email)) {
       toast({
         title: "E-mail inválido",
         description: "Por favor, insira um e-mail válido.",
@@ -132,6 +137,7 @@ const PatientRegister = () => {
       return false;
     }
 
+    // Validação de endereço
     if (!address.cep.trim() || !address.street.trim() || !address.number.trim() || 
         !address.neighborhood.trim() || !address.city.trim() || !address.state.trim()) {
       toast({
@@ -142,6 +148,7 @@ const PatientRegister = () => {
       return false;
     }
 
+    // Validação de documentos
     if (files.profilePhoto.length === 0) {
       toast({
         title: "Documento obrigatório",
@@ -198,7 +205,7 @@ const PatientRegister = () => {
 
       if (error) {
         console.error('Upload error:', error);
-        throw error;
+        throw new Error(`Erro no upload: ${error.message}`);
       }
 
       console.log('File uploaded successfully:', data);
@@ -223,7 +230,7 @@ const PatientRegister = () => {
     try {
       console.log('Starting file uploads...');
       
-      // Upload files with better error handling
+      // Upload files com tratamento de erro melhorado
       let profilePhotoUrl = "";
       let residenceProofUrl = "";
       let identityFrontUrl = "";
@@ -275,10 +282,10 @@ const PatientRegister = () => {
       console.log('All files uploaded successfully');
       console.log('Creating profile...');
 
-      // Generate UUID for the profile
+      // Gerar UUID para o perfil
       const profileId = crypto.randomUUID();
 
-      // Create profile
+      // Criar perfil
       const profileData = {
         id: profileId,
         full_name: formData.fullName.trim(),
@@ -297,7 +304,8 @@ const PatientRegister = () => {
         user_type: 'patient',
         profile_photo: profilePhotoUrl,
         residence_proof: residenceProofUrl,
-        status: 'pending'
+        status: 'pending',
+        is_active: true
       };
 
       console.log('Profile data:', profileData);
@@ -316,7 +324,7 @@ const PatientRegister = () => {
       console.log('Profile created successfully:', profile);
       console.log('Creating patient record...');
 
-      // Create patient record
+      // Criar registro de paciente
       const patientData = {
         id: profile.id,
         sus_card: formData.susNumber.trim(),
@@ -338,14 +346,14 @@ const PatientRegister = () => {
 
       toast({
         title: "Cadastro enviado com sucesso!",
-        description: "Aguarde a aprovação da prefeitura.",
+        description: "Aguarde a aprovação da prefeitura para acessar o sistema.",
       });
 
       navigate("/success", { state: { userType: "patient" } });
     } catch (error: any) {
       console.error('Registration error:', error);
       
-      let errorMessage = "Ocorreu um erro ao enviar o cadastro.";
+      let errorMessage = "Ocorreu um erro ao enviar o cadastro. Tente novamente.";
       
       if (error.message) {
         errorMessage = error.message;
