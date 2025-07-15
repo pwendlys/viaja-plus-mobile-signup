@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -5,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Eye, Check, X, User, Phone, Mail, MapPin, CreditCard, FileText, Camera, Home, Calendar, IdCard } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Search, Eye, Check, X, User, Phone, Mail, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -14,44 +16,30 @@ const PatientManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [rejectionReason, setRejectionReason] = useState("");
+  const [rejectedDocuments, setRejectedDocuments] = useState<string[]>([]);
   const [patients, setPatients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch patients from Supabase with proper joins
+  // Lista de documentos possíveis para pacientes
+  const patientDocuments = [
+    { key: 'residence_proof', label: 'Comprovante de Residência' },
+    { key: 'profile_photo', label: 'Foto de Perfil' },
+    { key: 'sus_card', label: 'Cartão SUS' }
+  ];
+
+  // Fetch patients from Supabase
   const fetchPatients = async () => {
     try {
-      console.log('Fetching patients with complete data...');
-      
       const { data, error } = await supabase
         .from('profiles')
         .select(`
           *,
-          patients!inner(*),
-          drivers(*)
+          patients(*)
         `)
         .eq('user_type', 'patient')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
-      }
-      
-      console.log('Fetched patients data:', data);
-      
-      // Log each patient's data for debugging
-      data?.forEach((patient, index) => {
-        console.log(`Patient ${index + 1}:`, {
-          name: patient.full_name,
-          susCard: patient.patients?.[0]?.sus_card,
-          profilePhoto: patient.profile_photo,
-          residenceProof: patient.residence_proof,
-          driversData: patient.drivers?.[0],
-          cnhFront: patient.drivers?.[0]?.cnh_front_photo,
-          cnhBack: patient.drivers?.[0]?.cnh_back_photo
-        });
-      });
-      
+      if (error) throw error;
       setPatients(data || []);
     } catch (error) {
       console.error('Error fetching patients:', error);
@@ -77,23 +65,6 @@ const PatientManagement = () => {
         table: 'profiles',
         filter: 'user_type=eq.patient'
       }, () => {
-        console.log('Real-time update detected, refetching data...');
-        fetchPatients();
-      })
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'patients'
-      }, () => {
-        console.log('Patients table update detected, refetching data...');
-        fetchPatients();
-      })
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'drivers'
-      }, () => {
-        console.log('Drivers table update detected, refetching data...');
         fetchPatients();
       })
       .subscribe();
@@ -103,24 +74,15 @@ const PatientManagement = () => {
     };
   }, []);
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "approved":
-        return <Badge className="bg-green-100 text-green-800">Aprovado</Badge>;
-      case "rejected":
-        return <Badge className="bg-red-100 text-red-800">Rejeitado</Badge>;
-      case "pending":
-        return <Badge className="bg-orange-100 text-orange-800">Pendente</Badge>;
-      default:
-        return <Badge variant="secondary">Desconhecido</Badge>;
-    }
-  };
-
   const handleApprove = async (patientId: string) => {
     try {
       const { error } = await supabase
         .from('profiles')
-        .update({ status: 'approved' })
+        .update({ 
+          status: 'approved',
+          rejected_documents: null,
+          rejection_reason: null
+        })
         .eq('id', patientId);
 
       if (error) throw error;
@@ -130,7 +92,7 @@ const PatientManagement = () => {
         description: "O paciente foi aprovado com sucesso.",
       });
       
-      fetchPatients(); // Refresh data
+      fetchPatients();
     } catch (error) {
       console.error('Error approving patient:', error);
       toast({
@@ -151,12 +113,22 @@ const PatientManagement = () => {
       return;
     }
 
+    if (rejectedDocuments.length === 0) {
+      toast({
+        title: "Erro",
+        description: "Por favor, selecione pelo menos um documento que precisa ser corrigido.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('profiles')
         .update({ 
           status: 'rejected',
-          rejection_reason: rejectionReason
+          rejection_reason: rejectionReason,
+          rejected_documents: rejectedDocuments
         })
         .eq('id', patientId);
 
@@ -164,12 +136,13 @@ const PatientManagement = () => {
 
       toast({
         title: "Paciente Rejeitado",
-        description: "O paciente foi rejeitado com sucesso.",
+        description: "O paciente foi rejeitado e poderá reenviar os documentos necessários.",
         variant: "destructive",
       });
       
       setRejectionReason("");
-      fetchPatients(); // Refresh data
+      setRejectedDocuments([]);
+      fetchPatients();
     } catch (error) {
       console.error('Error rejecting patient:', error);
       toast({
@@ -180,34 +153,12 @@ const PatientManagement = () => {
     }
   };
 
-  const getDocumentImage = (url: string | null | undefined) => {
-    if (!url) {
-      console.log('No URL provided for document image');
-      return null;
-    }
-    
-    console.log('Processing image URL:', url);
-    
-    // Se a URL já está completa (inclui http), usar como está
-    if (url.startsWith('http')) {
-      console.log('URL is already complete:', url);
-      return url;
-    }
-    
-    // Construir URL completa para o storage do Supabase
-    const baseUrl = 'https://yftbnwobufytmyrpuuis.supabase.co/storage/v1/object/public';
-    let finalUrl;
-    
-    // Se a URL já contém o bucket, usar como está
-    if (url.includes('user-uploads/') || url.includes('cnh-photos/') || url.includes('profile-photos/') || url.includes('residence-proofs/')) {
-      finalUrl = `${baseUrl}/${url}`;
+  const handleDocumentToggle = (documentKey: string, checked: boolean) => {
+    if (checked) {
+      setRejectedDocuments([...rejectedDocuments, documentKey]);
     } else {
-      // Assumir que está no bucket user-uploads
-      finalUrl = `${baseUrl}/user-uploads/${url}`;
+      setRejectedDocuments(rejectedDocuments.filter(doc => doc !== documentKey));
     }
-    
-    console.log('Final image URL:', finalUrl);
-    return finalUrl;
   };
 
   const filteredPatients = patients.filter(patient => {
@@ -217,9 +168,21 @@ const PatientManagement = () => {
     return matchesSearch && matchesStatus;
   });
 
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "approved":
+        return <Badge className="bg-green-100 text-green-800">Aprovado</Badge>;
+      case "rejected":
+        return <Badge className="bg-red-100 text-red-800">Rejeitado</Badge>;
+      case "pending":
+      default:
+        return <Badge className="bg-yellow-100 text-yellow-800">Pendente</Badge>;
+    }
+  };
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center h-64">
         <div className="text-lg">Carregando pacientes...</div>
       </div>
     );
@@ -234,422 +197,230 @@ const PatientManagement = () => {
 
       {/* Filtros */}
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className="p-6">
           <div className="flex flex-col md:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Buscar por nome ou CPF..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Input
+                  placeholder="Buscar por nome ou CPF..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
             </div>
             <div className="flex gap-2">
-              <Button
-                variant={filterStatus === "all" ? "default" : "outline"}
-                onClick={() => setFilterStatus("all")}
-              >
-                Todos
-              </Button>
-              <Button
-                variant={filterStatus === "pending" ? "default" : "outline"}
-                onClick={() => setFilterStatus("pending")}
-              >
-                Pendentes
-              </Button>
-              <Button
-                variant={filterStatus === "approved" ? "default" : "outline"}
-                onClick={() => setFilterStatus("approved")}
-              >
-                Aprovados
-              </Button>
-              <Button
-                variant={filterStatus === "rejected" ? "default" : "outline"}
-                onClick={() => setFilterStatus("rejected")}
-              >
-                Rejeitados
-              </Button>
+              {["all", "pending", "approved", "rejected"].map((status) => (
+                <Button
+                  key={status}
+                  variant={filterStatus === status ? "default" : "outline"}
+                  onClick={() => setFilterStatus(status)}
+                  className="capitalize"
+                >
+                  {status === "all" ? "Todos" : 
+                   status === "pending" ? "Pendentes" :
+                   status === "approved" ? "Aprovados" : "Rejeitados"}
+                </Button>
+              ))}
             </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Lista de Pacientes */}
-      <div className="grid gap-4">
-        {filteredPatients.map((patient) => (
-          <Card key={patient.id}>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center overflow-hidden">
-                    {patient.profile_photo ? (
-                      <img 
-                        src={getDocumentImage(patient.profile_photo)} 
-                        alt="Foto do paciente"
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          console.error('Error loading profile photo:', patient.profile_photo);
-                          e.currentTarget.style.display = 'none';
-                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                        }}
-                      />
-                    ) : null}
-                    <User className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">{patient.full_name}</h3>
-                    <p className="text-sm text-gray-600">CPF: {patient.cpf}</p>
-                    <div className="flex items-center gap-4 mt-1">
-                      <div className="flex items-center gap-1 text-sm text-gray-600">
-                        <Phone className="h-3 w-3" />
-                        {patient.phone}
+      <div className="space-y-4">
+        {filteredPatients.length === 0 ? (
+          <Card>
+            <CardContent className="p-6 text-center">
+              <p className="text-gray-500">Nenhum paciente encontrado.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          filteredPatients.map((patient) => (
+            <Card key={patient.id}>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                      <User className="w-6 h-6 text-green-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">{patient.full_name}</h3>
+                      <p className="text-sm text-gray-600">CPF: {patient.cpf}</p>
+                      <div className="flex items-center gap-4 mt-1">
+                        <div className="flex items-center gap-1 text-sm text-gray-600">
+                          <Phone className="h-3 w-3" />
+                          {patient.phone}
+                        </div>
+                        <div className="flex items-center gap-1 text-sm text-gray-600">
+                          <Mail className="h-3 w-3" />
+                          {patient.email}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1 text-sm text-gray-600">
-                        <CreditCard className="h-3 w-3" />
-                        SUS: {patient.patients?.[0]?.sus_card || 'Não informado'}
-                      </div>
+                      {patient.rejected_documents && patient.rejected_documents.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-sm text-red-600 font-medium">
+                            Documentos pendentes: {patient.rejected_documents.join(', ')}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  {getStatusBadge(patient.status)}
-                  
-                  {/* Botão Ver Detalhes */}
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        <Eye className="h-4 w-4 mr-1" />
-                        Ver Detalhes
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                      <DialogHeader>
-                        <DialogTitle>Detalhes do Paciente</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-6">
-                        {/* Informações Pessoais */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex items-center gap-2">
+                    {getStatusBadge(patient.status)}
+                    
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm">
+                          <Eye className="w-4 h-4 mr-1" />
+                          Ver Detalhes
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-2xl">
+                        <DialogHeader>
+                          <DialogTitle>Detalhes do Paciente - {patient.full_name}</DialogTitle>
+                        </DialogHeader>
+                        <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <label className="text-sm font-medium text-gray-700">Nome Completo</label>
-                            <p className="text-sm text-gray-900 font-medium">{patient.full_name}</p>
+                            <label className="text-sm font-medium">Nome Completo</label>
+                            <p className="text-sm text-gray-600">{patient.full_name}</p>
                           </div>
                           <div>
-                            <label className="text-sm font-medium text-gray-700">CPF</label>
-                            <p className="text-sm text-gray-900">{patient.cpf}</p>
+                            <label className="text-sm font-medium">CPF</label>
+                            <p className="text-sm text-gray-600">{patient.cpf}</p>
                           </div>
                           <div>
-                            <label className="text-sm font-medium text-gray-700">RG</label>
-                            <p className="text-sm text-gray-900">{patient.rg || 'Não informado'}</p>
+                            <label className="text-sm font-medium">Email</label>
+                            <p className="text-sm text-gray-600">{patient.email}</p>
                           </div>
                           <div>
-                            <label className="text-sm font-medium text-gray-700">Data de Nascimento</label>
-                            <p className="text-sm text-gray-900">
-                              {patient.birth_date ? new Date(patient.birth_date).toLocaleDateString('pt-BR') : 'Não informado'}
+                            <label className="text-sm font-medium">Telefone</label>
+                            <p className="text-sm text-gray-600">{patient.phone}</p>
+                          </div>
+                          <div className="col-span-2">
+                            <label className="text-sm font-medium">Endereço</label>
+                            <p className="text-sm text-gray-600">
+                              {`${patient.street}, ${patient.number} - ${patient.neighborhood}, ${patient.city} - ${patient.state}`}
                             </p>
                           </div>
-                          <div>
-                            <label className="text-sm font-medium text-gray-700">Email</label>
-                            <p className="text-sm text-gray-900">{patient.email}</p>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium text-gray-700">Telefone</label>
-                            <p className="text-sm text-gray-900">{patient.phone}</p>
-                          </div>
-                        </div>
-
-                        {/* Endereço */}
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <MapPin className="h-5 w-5" />
-                            Endereço
-                          </h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">CEP</label>
-                              <p className="text-sm text-gray-900">{patient.cep}</p>
-                            </div>
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">Rua</label>
-                              <p className="text-sm text-gray-900">{patient.street}</p>
-                            </div>
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">Número</label>
-                              <p className="text-sm text-gray-900">{patient.number}</p>
-                            </div>
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">Complemento</label>
-                              <p className="text-sm text-gray-900">{patient.complement || 'Não informado'}</p>
-                            </div>
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">Bairro</label>
-                              <p className="text-sm text-gray-900">{patient.neighborhood}</p>
-                            </div>
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">Cidade</label>
-                              <p className="text-sm text-gray-900">{patient.city}</p>
-                            </div>
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">Estado</label>
-                              <p className="text-sm text-gray-900">{patient.state}</p>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Informações Médicas */}
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <CreditCard className="h-5 w-5" />
-                            Informações Médicas
-                          </h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">Cartão SUS</label>
-                              <p className="text-sm text-gray-900 font-medium">
-                                {patient.patients?.[0]?.sus_card || 'Não informado'}
-                              </p>
-                            </div>
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">Possui Dependência?</label>
-                              <p className="text-sm text-gray-900">
-                                {patient.patients?.[0]?.has_dependency ? 'Sim' : 'Não'}
-                              </p>
-                            </div>
-                            {patient.patients?.[0]?.dependency_description && (
-                              <div className="md:col-span-2">
-                                <label className="text-sm font-medium text-gray-700">Descrição da Dependência</label>
-                                <p className="text-sm text-gray-900">{patient.patients[0].dependency_description}</p>
+                          {patient.patients?.[0] && (
+                            <>
+                              <div>
+                                <label className="text-sm font-medium">Cartão SUS</label>
+                                <p className="text-sm text-gray-600">{patient.patients[0].sus_card}</p>
                               </div>
-                            )}
-                            {patient.patients?.[0]?.special_needs && (
-                              <div className="md:col-span-2">
-                                <label className="text-sm font-medium text-gray-700">Necessidades Especiais</label>
-                                <p className="text-sm text-gray-900">{patient.patients[0].special_needs}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Documentos */}
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <FileText className="h-5 w-5" />
-                            Documentos Enviados
-                          </h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {/* Foto de Perfil */}
-                            {patient.profile_photo && (
-                              <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                                  <Camera className="h-4 w-4" />
-                                  Foto de Perfil
-                                </label>
-                                <div className="border rounded-lg overflow-hidden bg-gray-50">
-                                  <img 
-                                    src={getDocumentImage(patient.profile_photo)} 
-                                    alt="Foto de perfil"
-                                    className="w-full h-32 object-cover"
-                                    onError={(e) => {
-                                      console.error('Error loading profile photo:', patient.profile_photo);
-                                      e.currentTarget.src = '/placeholder.svg';
-                                    }}
-                                  />
-                                  <div className="p-2">
-                                    <a 
-                                      href={getDocumentImage(patient.profile_photo)} 
-                                      target="_blank" 
-                                      rel="noopener noreferrer"
-                                      className="text-xs text-blue-600 hover:underline"
-                                    >
-                                      Ver em tamanho completo
-                                    </a>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* CNH/RG Frente */}
-                            {patient.drivers?.[0]?.cnh_front_photo && (
-                              <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                                  <IdCard className="h-4 w-4" />
-                                  CNH/RG Frente
-                                </label>
-                                <div className="border rounded-lg overflow-hidden bg-gray-50">
-                                  <img 
-                                    src={getDocumentImage(patient.drivers[0].cnh_front_photo)} 
-                                    alt="CNH/RG Frente"
-                                    className="w-full h-32 object-cover"
-                                    onError={(e) => {
-                                      console.error('Error loading CNH front photo:', patient.drivers[0].cnh_front_photo);
-                                      e.currentTarget.src = '/placeholder.svg';
-                                    }}
-                                  />
-                                  <div className="p-2">
-                                    <a 
-                                      href={getDocumentImage(patient.drivers[0].cnh_front_photo)} 
-                                      target="_blank" 
-                                      rel="noopener noreferrer"
-                                      className="text-xs text-blue-600 hover:underline"
-                                    >
-                                      Ver documento completo
-                                    </a>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* CNH/RG Verso */}
-                            {patient.drivers?.[0]?.cnh_back_photo && (
-                              <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                                  <IdCard className="h-4 w-4" />
-                                  CNH/RG Verso
-                                </label>
-                                <div className="border rounded-lg overflow-hidden bg-gray-50">
-                                  <img 
-                                    src={getDocumentImage(patient.drivers[0].cnh_back_photo)} 
-                                    alt="CNH/RG Verso"
-                                    className="w-full h-32 object-cover"
-                                    onError={(e) => {
-                                      console.error('Error loading CNH back photo:', patient.drivers[0].cnh_back_photo);
-                                      e.currentTarget.src = '/placeholder.svg';
-                                    }}
-                                  />
-                                  <div className="p-2">
-                                    <a 
-                                      href={getDocumentImage(patient.drivers[0].cnh_back_photo)} 
-                                      target="_blank" 
-                                      rel="noopener noreferrer"
-                                      className="text-xs text-blue-600 hover:underline"
-                                    >
-                                      Ver documento completo
-                                    </a>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Comprovante de Residência */}
-                            {patient.residence_proof && (
-                              <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                                  <Home className="h-4 w-4" />
-                                  Comprovante de Residência
-                                </label>
-                                <div className="border rounded-lg overflow-hidden bg-gray-50">
-                                  <img 
-                                    src={getDocumentImage(patient.residence_proof)} 
-                                    alt="Comprovante de residência"
-                                    className="w-full h-32 object-cover"
-                                    onError={(e) => {
-                                      console.error('Error loading residence proof:', patient.residence_proof);
-                                      e.currentTarget.src = '/placeholder.svg';
-                                    }}
-                                  />
-                                  <div className="p-2">
-                                    <a 
-                                      href={getDocumentImage(patient.residence_proof)} 
-                                      target="_blank" 
-                                      rel="noopener noreferrer"
-                                      className="text-xs text-blue-600 hover:underline"
-                                    >
-                                      Ver documento completo
-                                    </a>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Alerta quando não há documentos CNH */}
-                            {!patient.drivers?.[0]?.cnh_front_photo && !patient.drivers?.[0]?.cnh_back_photo && (
-                              <div className="col-span-full p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                                <p className="text-sm text-yellow-700">
-                                  Documentos CNH não encontrados para este paciente.
-                                  {patient.drivers?.[0] ? ' Dados do driver existem mas sem fotos CNH.' : ' Dados do driver não encontrados.'}
+                              <div>
+                                <label className="text-sm font-medium">Tem Dependência</label>
+                                <p className="text-sm text-gray-600">
+                                  {patient.patients[0].has_dependency ? 'Sim' : 'Não'}
                                 </p>
                               </div>
-                            )}
+                              {patient.patients[0].dependency_description && (
+                                <div className="col-span-2">
+                                  <label className="text-sm font-medium">Descrição da Dependência</label>
+                                  <p className="text-sm text-gray-600">{patient.patients[0].dependency_description}</p>
+                                </div>
+                              )}
+                              {patient.patients[0].special_needs && (
+                                <div className="col-span-2">
+                                  <label className="text-sm font-medium">Necessidades Especiais</label>
+                                  <p className="text-sm text-gray-600">{patient.patients[0].special_needs}</p>
+                                </div>
+                              )}
+                            </>
+                          )}
+                          <div>
+                            <label className="text-sm font-medium">Data de Cadastro</label>
+                            <p className="text-sm text-gray-600">
+                              {new Date(patient.created_at).toLocaleDateString('pt-BR')}
+                            </p>
                           </div>
-                        </div>
-
-                        {/* Informações de Cadastro */}
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <Calendar className="h-5 w-5" />
-                            Informações de Cadastro
-                          </h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">Data de Cadastro</label>
-                              <p className="text-sm text-gray-900">
-                                {new Date(patient.created_at).toLocaleDateString('pt-BR')} às {new Date(patient.created_at).toLocaleTimeString('pt-BR')}
-                              </p>
+                          {patient.rejection_reason && (
+                            <div className="col-span-2">
+                              <label className="text-sm font-medium">Motivo da Rejeição</label>
+                              <p className="text-sm text-red-600">{patient.rejection_reason}</p>
                             </div>
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">Status</label>
-                              <div className="mt-1">
-                                {getStatusBadge(patient.status)}
-                              </div>
+                          )}
+                          {patient.rejected_documents && patient.rejected_documents.length > 0 && (
+                            <div className="col-span-2">
+                              <label className="text-sm font-medium">Documentos Rejeitados</label>
+                              <p className="text-sm text-red-600">{patient.rejected_documents.join(', ')}</p>
                             </div>
-                            {patient.rejection_reason && (
-                              <div className="md:col-span-2">
-                                <label className="text-sm font-medium text-red-700">Motivo da Rejeição</label>
-                                <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{patient.rejection_reason}</p>
-                              </div>
-                            )}
-                          </div>
+                          )}
                         </div>
-
-                        {/* Botões de Ação */}
+                        
                         {patient.status === "pending" && (
-                          <div className="flex gap-3 pt-4 border-t">
-                            <Button 
-                              onClick={() => handleApprove(patient.id)}
-                              className="flex-1"
-                            >
-                              <Check className="h-4 w-4 mr-1" />
-                              Aprovar
-                            </Button>
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <Button variant="destructive" className="flex-1">
-                                  <X className="h-4 w-4 mr-1" />
-                                  Rejeitar
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent>
-                                <DialogHeader>
-                                  <DialogTitle>Rejeitar Cadastro</DialogTitle>
-                                </DialogHeader>
-                                <div className="space-y-4">
-                                  <Textarea
-                                    placeholder="Informe o motivo da rejeição..."
-                                    value={rejectionReason}
-                                    onChange={(e) => setRejectionReason(e.target.value)}
-                                  />
-                                  <div className="flex gap-3">
+                          <div className="flex flex-col gap-4 mt-6 pt-4 border-t">
+                            <div className="flex gap-2">
+                              <Button 
+                                onClick={() => handleApprove(patient.id)}
+                                className="flex-1 bg-green-600 hover:bg-green-700"
+                              >
+                                <Check className="w-4 h-4 mr-1" />
+                                Aprovar
+                              </Button>
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="outline" className="flex-1 border-red-300 text-red-600 hover:bg-red-50">
+                                    <X className="w-4 h-4 mr-1" />
+                                    Rejeitar
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Rejeitar Paciente</DialogTitle>
+                                  </DialogHeader>
+                                  <div className="space-y-4">
+                                    <div>
+                                      <label className="text-sm font-medium">Documentos que precisam ser corrigidos</label>
+                                      <div className="mt-2 space-y-2">
+                                        {patientDocuments.map((doc) => (
+                                          <div key={doc.key} className="flex items-center space-x-2">
+                                            <Checkbox
+                                              id={doc.key}
+                                              checked={rejectedDocuments.includes(doc.key)}
+                                              onCheckedChange={(checked) => handleDocumentToggle(doc.key, checked as boolean)}
+                                            />
+                                            <label 
+                                              htmlFor={doc.key}
+                                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                            >
+                                              {doc.label}
+                                            </label>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <label className="text-sm font-medium">Motivo da rejeição</label>
+                                      <Textarea
+                                        value={rejectionReason}
+                                        onChange={(e) => setRejectionReason(e.target.value)}
+                                        placeholder="Descreva os problemas encontrados nos documentos..."
+                                        className="mt-1"
+                                      />
+                                    </div>
                                     <Button 
-                                      variant="destructive" 
                                       onClick={() => handleReject(patient.id)}
-                                      className="flex-1"
+                                      className="w-full bg-red-600 hover:bg-red-700"
                                     >
                                       Confirmar Rejeição
                                     </Button>
                                   </div>
-                                </div>
-                              </DialogContent>
-                            </Dialog>
+                                </DialogContent>
+                              </Dialog>
+                            </div>
                           </div>
                         )}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
     </div>
   );

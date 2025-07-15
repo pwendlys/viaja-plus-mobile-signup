@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -139,7 +140,11 @@ const RegistrationStatus = () => {
 
   const getRejectedDocuments = () => {
     if (!profile?.rejected_documents) return [];
-    return profile.rejected_documents;
+    // Garantir que seja sempre um array
+    if (Array.isArray(profile.rejected_documents)) {
+      return profile.rejected_documents;
+    }
+    return [];
   };
 
   const handleFileUpload = async (files: File[]) => {
@@ -149,20 +154,29 @@ const RegistrationStatus = () => {
     setResubmitting(true);
     
     try {
+      console.log('Uploading file:', file.name, 'for document:', selectedDocument);
+      
       // Upload do arquivo
       const fileExt = file.name.split('.').pop();
       const fileName = `${profile.id}_${selectedDocument}_${Date.now()}.${fileExt}`;
       const bucketName = getBucketName(selectedDocument);
 
+      console.log('Uploading to bucket:', bucketName);
+
       const { error: uploadError } = await supabase.storage
         .from(bucketName)
         .upload(fileName, file);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw uploadError;
+      }
 
       const { data: { publicUrl } } = supabase.storage
         .from(bucketName)
         .getPublicUrl(fileName);
+
+      console.log('File uploaded successfully, URL:', publicUrl);
 
       // Atualizar perfil com novo documento
       const updateData: any = {};
@@ -171,7 +185,7 @@ const RegistrationStatus = () => {
       updateData.resubmission_count = (profile.resubmission_count || 0) + 1;
 
       // Remover documento da lista de rejeitados
-      const currentRejected = profile.rejected_documents || [];
+      const currentRejected = getRejectedDocuments();
       const updatedRejected = currentRejected.filter((doc: string) => doc !== selectedDocument);
       updateData.rejected_documents = updatedRejected;
 
@@ -181,23 +195,37 @@ const RegistrationStatus = () => {
         updateData.rejection_reason = null;
       }
 
+      console.log('Updating profile with:', updateData);
+
       const { error: updateError } = await supabase
         .from('profiles')
         .update(updateData)
         .eq('id', profile.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('Update error:', updateError);
+        throw updateError;
+      }
 
       // Registrar no histórico
-      await supabase
+      const historyData = {
+        user_id: profile.id,
+        document_type: selectedDocument,
+        document_url: publicUrl,
+        status: 'pending',
+        version: getNextVersion(selectedDocument)
+      };
+
+      console.log('Inserting history:', historyData);
+
+      const { error: historyError } = await supabase
         .from('document_history')
-        .insert({
-          user_id: profile.id,
-          document_type: selectedDocument,
-          document_url: publicUrl,
-          status: 'pending',
-          version: getNextVersion(selectedDocument)
-        });
+        .insert(historyData);
+
+      if (historyError) {
+        console.error('History error:', historyError);
+        // Não falhar se o histórico não conseguir ser salvo
+      }
 
       toast({
         title: "Documento Reenviado",
@@ -205,7 +233,7 @@ const RegistrationStatus = () => {
       });
 
       setSelectedDocument(null);
-      fetchUserData();
+      await fetchUserData(); // Recarregar dados
 
     } catch (error) {
       console.error('Error uploading document:', error);
@@ -271,6 +299,10 @@ const RegistrationStatus = () => {
   }
 
   const rejectedDocuments = getRejectedDocuments();
+
+  console.log('Profile data:', profile);
+  console.log('Rejected documents:', rejectedDocuments);
+  console.log('Profile status:', profile.status);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
@@ -365,7 +397,7 @@ const RegistrationStatus = () => {
         </Card>
 
         {/* Documentos Rejeitados - Área de Reenvio */}
-        {rejectedDocuments.length > 0 && (
+        {profile.status === 'rejected' && rejectedDocuments.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-red-700">
@@ -414,6 +446,7 @@ const RegistrationStatus = () => {
                         size="sm"
                         onClick={() => setSelectedDocument(docType)}
                         className="bg-red-600 hover:bg-red-700"
+                        disabled={resubmitting}
                       >
                         <Upload className="w-4 h-4 mr-1" />
                         Reenviar Documento
@@ -422,6 +455,24 @@ const RegistrationStatus = () => {
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Debug - mostrar dados do perfil em desenvolvimento */}
+        {process.env.NODE_ENV === 'development' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Debug - Dados do Perfil</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="text-xs bg-gray-100 p-2 rounded overflow-auto">
+                {JSON.stringify({ 
+                  status: profile.status, 
+                  rejected_documents: profile.rejected_documents,
+                  rejection_reason: profile.rejection_reason 
+                }, null, 2)}
+              </pre>
             </CardContent>
           </Card>
         )}
