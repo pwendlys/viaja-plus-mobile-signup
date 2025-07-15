@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
-import { FileUpload } from "@/components/FileUpload";
+import FileUpload from "@/components/FileUpload";
 import { 
   Clock, 
   CheckCircle, 
@@ -143,14 +143,17 @@ const RegistrationStatus = () => {
     return profile.rejected_documents;
   };
 
-  const handleFileUpload = async (file: File, documentType: string) => {
+  const handleFileUpload = async (files: File[]) => {
+    if (files.length === 0 || !selectedDocument) return;
+    
+    const file = files[0];
     setResubmitting(true);
     
     try {
       // Upload do arquivo
       const fileExt = file.name.split('.').pop();
-      const fileName = `${profile.id}_${documentType}_${Date.now()}.${fileExt}`;
-      const bucketName = getBucketName(documentType);
+      const fileName = `${profile.id}_${selectedDocument}_${Date.now()}.${fileExt}`;
+      const bucketName = getBucketName(selectedDocument);
 
       const { error: uploadError } = await supabase.storage
         .from(bucketName)
@@ -164,13 +167,13 @@ const RegistrationStatus = () => {
 
       // Atualizar perfil com novo documento
       const updateData: any = {};
-      updateData[getProfileFieldName(documentType)] = publicUrl;
+      updateData[getProfileFieldName(selectedDocument)] = publicUrl;
       updateData.last_resubmission_at = new Date().toISOString();
       updateData.resubmission_count = (profile.resubmission_count || 0) + 1;
 
       // Remover documento da lista de rejeitados
       const currentRejected = profile.rejected_documents || [];
-      const updatedRejected = currentRejected.filter((doc: string) => doc !== documentType);
+      const updatedRejected = currentRejected.filter((doc: string) => doc !== selectedDocument);
       updateData.rejected_documents = updatedRejected;
 
       // Se não há mais documentos rejeitados, voltar status para pending
@@ -191,15 +194,15 @@ const RegistrationStatus = () => {
         .from('document_history')
         .insert({
           user_id: profile.id,
-          document_type: documentType,
+          document_type: selectedDocument,
           document_url: publicUrl,
           status: 'pending',
-          version: getNextVersion(documentType)
+          version: getNextVersion(selectedDocument)
         });
 
       toast({
         title: "Documento Reenviado",
-        description: `${getDocumentDisplayName(documentType)} foi reenviado com sucesso.`,
+        description: `${getDocumentDisplayName(selectedDocument)} foi reenviado com sucesso.`,
       });
 
       setSelectedDocument(null);
@@ -390,9 +393,11 @@ const RegistrationStatus = () => {
                     {selectedDocument === docType ? (
                       <div className="space-y-3">
                         <FileUpload
-                          onFileSelect={(file) => handleFileUpload(file, docType)}
+                          label="Selecione o novo documento"
                           accept="image/*,.pdf"
-                          maxSize={5}
+                          multiple={false}
+                          required={true}
+                          onFileChange={handleFileUpload}
                         />
                         <div className="flex gap-2">
                           <Button
