@@ -67,7 +67,7 @@ const LoginScreen = () => {
         // Buscar perfil do usuário para verificar tipo e status
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('user_type, status')
+          .select('user_type, status, rejected_documents')
           .eq('id', data.user.id)
           .single();
 
@@ -80,8 +80,23 @@ const LoginScreen = () => {
           return;
         }
 
-        // Verificar se o perfil foi aprovado
-        if (profile.status !== 'approved') {
+        // Verificar status do perfil e redirecionar adequadamente
+        if (profile.status === 'rejected') {
+          toast({
+            title: "Cadastro Rejeitado",
+            description: "Sua solicitação foi rejeitada. Você será redirecionado para reenviar os documentos.",
+            variant: "destructive",
+          });
+          navigate("/registration-status");
+          return;
+        } else if (profile.status === 'pending') {
+          toast({
+            title: "Cadastro Pendente",
+            description: "Sua solicitação ainda está sendo analisada. Acompanhe o status.",
+          });
+          navigate("/registration-status");
+          return;
+        } else if (profile.status !== 'approved') {
           toast({
             title: "Conta Pendente",
             description: "Sua conta ainda está aguardando aprovação da prefeitura.",
@@ -91,7 +106,7 @@ const LoginScreen = () => {
           return;
         }
 
-        // Redirecionar baseado no tipo de usuário
+        // Se aprovado, redirecionar baseado no tipo de usuário
         if (profile.user_type === 'patient') {
           navigate("/patient");
         } else if (profile.user_type === 'driver') {
@@ -195,6 +210,16 @@ const LoginScreen = () => {
               >
                 Criar Nova Conta
               </Button>
+              
+              <div className="mt-4">
+                <Button
+                  variant="link"
+                  onClick={() => navigate("/registration-status")}
+                  className="text-sm text-gray-600 hover:text-primary"
+                >
+                  Acompanhar Status da Solicitação
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

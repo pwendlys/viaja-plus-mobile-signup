@@ -41,6 +41,47 @@ export type Database = {
         }
         Relationships: []
       }
+      document_history: {
+        Row: {
+          document_type: string
+          document_url: string
+          id: string
+          rejection_reason: string | null
+          status: string | null
+          uploaded_at: string | null
+          user_id: string
+          version: number | null
+        }
+        Insert: {
+          document_type: string
+          document_url: string
+          id?: string
+          rejection_reason?: string | null
+          status?: string | null
+          uploaded_at?: string | null
+          user_id: string
+          version?: number | null
+        }
+        Update: {
+          document_type?: string
+          document_url?: string
+          id?: string
+          rejection_reason?: string | null
+          status?: string | null
+          uploaded_at?: string | null
+          user_id?: string
+          version?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       driver_balance: {
         Row: {
           available_balance: number
@@ -459,12 +500,15 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean | null
+          last_resubmission_at: string | null
           neighborhood: string | null
           number: string | null
           phone: string
           profile_photo: string | null
+          rejected_documents: string[] | null
           rejection_reason: string | null
           residence_proof: string | null
+          resubmission_count: number | null
           rg: string | null
           state: string | null
           status: string | null
@@ -483,12 +527,15 @@ export type Database = {
           full_name: string
           id: string
           is_active?: boolean | null
+          last_resubmission_at?: string | null
           neighborhood?: string | null
           number?: string | null
           phone: string
           profile_photo?: string | null
+          rejected_documents?: string[] | null
           rejection_reason?: string | null
           residence_proof?: string | null
+          resubmission_count?: number | null
           rg?: string | null
           state?: string | null
           status?: string | null
@@ -507,12 +554,15 @@ export type Database = {
           full_name?: string
           id?: string
           is_active?: boolean | null
+          last_resubmission_at?: string | null
           neighborhood?: string | null
           number?: string | null
           phone?: string
           profile_photo?: string | null
+          rejected_documents?: string[] | null
           rejection_reason?: string | null
           residence_proof?: string | null
+          resubmission_count?: number | null
           rg?: string | null
           state?: string | null
           status?: string | null

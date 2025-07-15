@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -5,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Search, Eye, Check, X, Car, Phone, Mail, CreditCard, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,8 +16,20 @@ const DriverManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [rejectionReason, setRejectionReason] = useState("");
+  const [rejectedDocuments, setRejectedDocuments] = useState<string[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Lista de documentos possíveis para motoristas
+  const driverDocuments = [
+    { key: 'residence_proof', label: 'Comprovante de Residência' },
+    { key: 'profile_photo', label: 'Foto de Perfil' },
+    { key: 'cnh_front', label: 'CNH (Frente)' },
+    { key: 'cnh_back', label: 'CNH (Verso)' },
+    { key: 'vehicle_document', label: 'Documento do Veículo' },
+    { key: 'vehicle_photo', label: 'Foto do Veículo' },
+    { key: 'selfie_with_document', label: 'Selfie com Documento' }
+  ];
 
   // Fetch drivers from Supabase
   const fetchDrivers = async () => {
@@ -68,7 +82,11 @@ const DriverManagement = () => {
     try {
       const { error } = await supabase
         .from('profiles')
-        .update({ status: 'approved' })
+        .update({ 
+          status: 'approved',
+          rejected_documents: null,
+          rejection_reason: null
+        })
         .eq('id', driverId);
 
       if (error) throw error;
@@ -99,12 +117,22 @@ const DriverManagement = () => {
       return;
     }
 
+    if (rejectedDocuments.length === 0) {
+      toast({
+        title: "Erro",
+        description: "Por favor, selecione pelo menos um documento que precisa ser corrigido.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('profiles')
         .update({ 
           status: 'rejected',
-          rejection_reason: rejectionReason
+          rejection_reason: rejectionReason,
+          rejected_documents: rejectedDocuments
         })
         .eq('id', driverId);
 
@@ -112,11 +140,12 @@ const DriverManagement = () => {
 
       toast({
         title: "Motorista Rejeitado",
-        description: "O motorista foi rejeitado com sucesso.",
+        description: "O motorista foi rejeitado e poderá reenviar os documentos necessários.",
         variant: "destructive",
       });
       
       setRejectionReason("");
+      setRejectedDocuments([]);
       fetchDrivers();
     } catch (error) {
       console.error('Error rejecting driver:', error);
@@ -125,6 +154,14 @@ const DriverManagement = () => {
         description: "Não foi possível rejeitar o motorista.",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleDocumentToggle = (documentKey: string, checked: boolean) => {
+    if (checked) {
+      setRejectedDocuments([...rejectedDocuments, documentKey]);
+    } else {
+      setRejectedDocuments(rejectedDocuments.filter(doc => doc !== documentKey));
     }
   };
 
@@ -227,6 +264,13 @@ const DriverManagement = () => {
                           </div>
                         )}
                       </div>
+                      {driver.rejected_documents && driver.rejected_documents.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-sm text-red-600 font-medium">
+                            Documentos pendentes: {driver.rejected_documents.join(', ')}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -300,6 +344,12 @@ const DriverManagement = () => {
                               <p className="text-sm text-red-600">{driver.rejection_reason}</p>
                             </div>
                           )}
+                          {driver.rejected_documents && driver.rejected_documents.length > 0 && (
+                            <div className="col-span-2">
+                              <label className="text-sm font-medium">Documentos Rejeitados</label>
+                              <p className="text-sm text-red-600">{driver.rejected_documents.join(', ')}</p>
+                            </div>
+                          )}
                         </div>
                         
                         {driver.status === "pending" && (
@@ -325,11 +375,31 @@ const DriverManagement = () => {
                                   </DialogHeader>
                                   <div className="space-y-4">
                                     <div>
+                                      <label className="text-sm font-medium">Documentos que precisam ser corrigidos</label>
+                                      <div className="mt-2 space-y-2">
+                                        {driverDocuments.map((doc) => (
+                                          <div key={doc.key} className="flex items-center space-x-2">
+                                            <Checkbox
+                                              id={doc.key}
+                                              checked={rejectedDocuments.includes(doc.key)}
+                                              onCheckedChange={(checked) => handleDocumentToggle(doc.key, checked as boolean)}
+                                            />
+                                            <label 
+                                              htmlFor={doc.key}
+                                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                            >
+                                              {doc.label}
+                                            </label>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <div>
                                       <label className="text-sm font-medium">Motivo da rejeição</label>
                                       <Textarea
                                         value={rejectionReason}
                                         onChange={(e) => setRejectionReason(e.target.value)}
-                                        placeholder="Informe o motivo da rejeição..."
+                                        placeholder="Descreva os problemas encontrados nos documentos..."
                                         className="mt-1"
                                       />
                                     </div>
