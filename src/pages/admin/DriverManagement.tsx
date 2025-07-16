@@ -191,10 +191,25 @@ const DriverManagement = () => {
     const driver = drivers.find(d => d.id === driverId);
     if (!driver) return;
 
-    const currentRejected = driver.rejected_documents || [];
-    const updatedRejected = currentRejected.filter((doc: string) => doc !== documentKey);
-
     try {
+      // Registrar na document_history
+      const { error: historyError } = await supabase
+        .from('document_history')
+        .insert({
+          user_id: driverId,
+          document_type: documentKey,
+          document_url: getDriverDocuments(driver).find(d => d.key === documentKey)?.url || '',
+          status: 'approved'
+        });
+
+      if (historyError) {
+        console.error('Error inserting document history:', historyError);
+      }
+
+      // Remover documento da lista de rejeitados
+      const currentRejected = driver.rejected_documents || [];
+      const updatedRejected = currentRejected.filter((doc: string) => doc !== documentKey);
+
       const updateData: any = {
         rejected_documents: updatedRejected
       };
@@ -214,9 +229,7 @@ const DriverManagement = () => {
 
       toast({
         title: "Documento Aprovado",
-        description: updatedRejected.length === 0 
-          ? "Todos os documentos foram aprovados. Motorista liberado!"
-          : "Documento aprovado com sucesso.",
+        description: `Documento ${documentKey} foi aprovado com sucesso.`,
       });
 
       fetchDrivers();
@@ -244,9 +257,23 @@ const DriverManagement = () => {
       return;
     }
 
-    const updatedRejected = [...currentRejected, documentKey];
-
     try {
+      // Registrar na document_history
+      const { error: historyError } = await supabase
+        .from('document_history')
+        .insert({
+          user_id: driverId,
+          document_type: documentKey,
+          document_url: getDriverDocuments(driver).find(d => d.key === documentKey)?.url || '',
+          status: 'rejected'
+        });
+
+      if (historyError) {
+        console.error('Error inserting document history:', historyError);
+      }
+
+      const updatedRejected = [...currentRejected, documentKey];
+
       const { error } = await supabase
         .from('profiles')
         .update({ 
@@ -260,7 +287,7 @@ const DriverManagement = () => {
 
       toast({
         title: "Documento Rejeitado",
-        description: "O documento foi rejeitado e o motorista deverá reenviá-lo.",
+        description: `Documento ${documentKey} foi rejeitado.`,
         variant: "destructive",
       });
 
@@ -270,6 +297,109 @@ const DriverManagement = () => {
       toast({
         title: "Erro",
         description: "Não foi possível rejeitar o documento.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleApproveMultiple = async (driverId: string, documentKeys: string[]) => {
+    const driver = drivers.find(d => d.id === driverId);
+    if (!driver) return;
+
+    try {
+      // Registrar múltiplos documentos na document_history
+      const historyPromises = documentKeys.map(documentKey => 
+        supabase.from('document_history').insert({
+          user_id: driverId,
+          document_type: documentKey,
+          document_url: getDriverDocuments(driver).find(d => d.key === documentKey)?.url || '',
+          status: 'approved'
+        })
+      );
+
+      await Promise.all(historyPromises);
+
+      // Remover documentos da lista de rejeitados
+      const currentRejected = driver.rejected_documents || [];
+      const updatedRejected = currentRejected.filter((doc: string) => !documentKeys.includes(doc));
+
+      const updateData: any = {
+        rejected_documents: updatedRejected
+      };
+
+      // Se não há mais documentos rejeitados, aprovar completamente
+      if (updatedRejected.length === 0) {
+        updateData.status = 'approved';
+        updateData.rejection_reason = null;
+      }
+
+      const { error } = await supabase
+        .from('profiles')
+        .update(updateData)
+        .eq('id', driverId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Documentos Aprovados",
+        description: `${documentKeys.length} documento(s) aprovado(s) com sucesso.`,
+      });
+
+      fetchDrivers();
+    } catch (error) {
+      console.error('Error approving multiple documents:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível aprovar os documentos selecionados.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRejectMultiple = async (driverId: string, documentKeys: string[]) => {
+    const driver = drivers.find(d => d.id === driverId);
+    if (!driver) return;
+
+    try {
+      // Registrar múltiplos documentos na document_history
+      const historyPromises = documentKeys.map(documentKey => 
+        supabase.from('document_history').insert({
+          user_id: driverId,
+          document_type: documentKey,
+          document_url: getDriverDocuments(driver).find(d => d.key === documentKey)?.url || '',
+          status: 'rejected'
+        })
+      );
+
+      await Promise.all(historyPromises);
+
+      const currentRejected = driver.rejected_documents || [];
+      const newRejected = documentKeys.filter(key => !currentRejected.includes(key));
+      const updatedRejected = [...currentRejected, ...newRejected];
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          status: 'rejected',
+          rejected_documents: updatedRejected,
+          rejection_reason: driver.rejection_reason || `Documentos rejeitados: ${documentKeys.join(', ')}`
+        })
+        .eq('id', driverId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Documentos Rejeitados",
+        description: `${documentKeys.length} documento(s) rejeitado(s).`,
+        variant: "destructive",
+      });
+
+      fetchDrivers();
+    } catch (error) {
+      console.error('Error rejecting multiple documents:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível rejeitar os documentos selecionados.",
         variant: "destructive",
       });
     }
@@ -477,7 +607,10 @@ const DriverManagement = () => {
                           documents={getDriverDocuments(driver)}
                           onApproveDocument={(docKey) => handleApproveDocument(driver.id, docKey)}
                           onRejectDocument={(docKey) => handleRejectDocument(driver.id, docKey)}
+                          onApproveMultiple={(docKeys) => handleApproveMultiple(driver.id, docKeys)}
+                          onRejectMultiple={(docKeys) => handleRejectMultiple(driver.id, docKeys)}
                           showActions={driver.status !== 'approved'}
+                          allowMultipleSelection={true}
                         />
                         
                         {driver.status === "pending" && (

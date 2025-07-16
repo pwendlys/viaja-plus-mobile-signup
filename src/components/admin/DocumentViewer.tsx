@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Eye, Download, Check, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Eye, Download, Check, X, CheckSquare, Square } from "lucide-react";
 
 interface Document {
   key: string;
@@ -17,16 +18,23 @@ interface DocumentViewerProps {
   documents: Document[];
   onApproveDocument?: (documentKey: string) => void;
   onRejectDocument?: (documentKey: string) => void;
+  onApproveMultiple?: (documentKeys: string[]) => void;
+  onRejectMultiple?: (documentKeys: string[]) => void;
   showActions?: boolean;
+  allowMultipleSelection?: boolean;
 }
 
 const DocumentViewer = ({ 
   documents, 
   onApproveDocument, 
   onRejectDocument,
-  showActions = false 
+  onApproveMultiple,
+  onRejectMultiple,
+  showActions = false,
+  allowMultipleSelection = false
 }: DocumentViewerProps) => {
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
+  const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
 
   const getStatusBadge = (status?: string) => {
     switch (status) {
@@ -61,15 +69,99 @@ const DocumentViewer = ({
     }
   };
 
+  const toggleDocumentSelection = (documentKey: string) => {
+    setSelectedDocuments(prev => 
+      prev.includes(documentKey) 
+        ? prev.filter(key => key !== documentKey)
+        : [...prev, documentKey]
+    );
+  };
+
+  const selectAllDocuments = () => {
+    const allKeys = documents.filter(doc => doc.url).map(doc => doc.key);
+    setSelectedDocuments(allKeys);
+  };
+
+  const clearSelection = () => {
+    setSelectedDocuments([]);
+  };
+
+  const handleApproveSelected = () => {
+    if (onApproveMultiple && selectedDocuments.length > 0) {
+      onApproveMultiple(selectedDocuments);
+      clearSelection();
+    }
+  };
+
+  const handleRejectSelected = () => {
+    if (onRejectMultiple && selectedDocuments.length > 0) {
+      onRejectMultiple(selectedDocuments);
+      clearSelection();
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold">Documentos Enviados</h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold">Documentos Enviados</h3>
+        {allowMultipleSelection && showActions && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={selectedDocuments.length === documents.filter(d => d.url).length ? clearSelection : selectAllDocuments}
+            >
+              {selectedDocuments.length === documents.filter(d => d.url).length ? (
+                <>
+                  <Square className="w-4 h-4 mr-1" />
+                  Desmarcar Todos
+                </>
+              ) : (
+                <>
+                  <CheckSquare className="w-4 h-4 mr-1" />
+                  Selecionar Todos
+                </>
+              )}
+            </Button>
+            {selectedDocuments.length > 0 && (
+              <>
+                <Button
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700"
+                  onClick={handleApproveSelected}
+                >
+                  <Check className="w-4 h-4 mr-1" />
+                  Aprovar Selecionados ({selectedDocuments.length})
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-red-300 text-red-600 hover:bg-red-50"
+                  onClick={handleRejectSelected}
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Rejeitar Selecionados ({selectedDocuments.length})
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {documents.map((doc) => (
-          <Card key={doc.key} className="overflow-hidden">
+          <Card key={doc.key} className={`overflow-hidden ${selectedDocuments.includes(doc.key) ? 'ring-2 ring-blue-500' : ''}`}>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center justify-between">
-                <span>{doc.label}</span>
+                <div className="flex items-center gap-2">
+                  {allowMultipleSelection && showActions && doc.url && (
+                    <Checkbox
+                      checked={selectedDocuments.includes(doc.key)}
+                      onCheckedChange={() => toggleDocumentSelection(doc.key)}
+                    />
+                  )}
+                  <span>{doc.label}</span>
+                </div>
                 {getStatusBadge(doc.status)}
               </CardTitle>
             </CardHeader>
@@ -115,23 +207,23 @@ const DocumentViewer = ({
                             <Download className="w-4 h-4 mr-1" />
                             Download
                           </Button>
-                          {showActions && onApproveDocument && (
+                          {showActions && onApproveDocument && doc.status !== 'approved' && (
                             <Button
                               className="bg-green-600 hover:bg-green-700"
                               onClick={() => onApproveDocument(doc.key)}
                             >
                               <Check className="w-4 h-4 mr-1" />
-                              Aprovar
+                              Aprovar Este Documento
                             </Button>
                           )}
-                          {showActions && onRejectDocument && (
+                          {showActions && onRejectDocument && doc.status !== 'rejected' && (
                             <Button
                               variant="outline"
                               className="border-red-300 text-red-600 hover:bg-red-50"
                               onClick={() => onRejectDocument(doc.key)}
                             >
                               <X className="w-4 h-4 mr-1" />
-                              Rejeitar
+                              Rejeitar Este Documento
                             </Button>
                           )}
                         </div>
@@ -145,26 +237,30 @@ const DocumentViewer = ({
                       <Download className="w-3 h-3 mr-1" />
                       Download
                     </Button>
-                    {showActions && onApproveDocument && (
-                      <Button
-                        size="sm"
-                        className="bg-green-600 hover:bg-green-700"
-                        onClick={() => onApproveDocument(doc.key)}
-                      >
-                        <Check className="w-3 h-3 mr-1" />
-                        Aprovar
-                      </Button>
-                    )}
-                    {showActions && onRejectDocument && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="border-red-300 text-red-600 hover:bg-red-50"
-                        onClick={() => onRejectDocument(doc.key)}
-                      >
-                        <X className="w-3 h-3 mr-1" />
-                        Rejeitar
-                      </Button>
+                    {showActions && !allowMultipleSelection && (
+                      <>
+                        {onApproveDocument && doc.status !== 'approved' && (
+                          <Button
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700"
+                            onClick={() => onApproveDocument(doc.key)}
+                          >
+                            <Check className="w-3 h-3 mr-1" />
+                            Aprovar
+                          </Button>
+                        )}
+                        {onRejectDocument && doc.status !== 'rejected' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-red-300 text-red-600 hover:bg-red-50"
+                            onClick={() => onRejectDocument(doc.key)}
+                          >
+                            <X className="w-3 h-3 mr-1" />
+                            Rejeitar
+                          </Button>
+                        )}
+                      </>
                     )}
                   </div>
                 </>

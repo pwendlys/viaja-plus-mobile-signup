@@ -187,10 +187,25 @@ const PatientManagement = () => {
     const patient = patients.find(p => p.id === patientId);
     if (!patient) return;
 
-    const currentRejected = patient.rejected_documents || [];
-    const updatedRejected = currentRejected.filter((doc: string) => doc !== documentKey);
-
     try {
+      // Registrar na document_history
+      const { error: historyError } = await supabase
+        .from('document_history')
+        .insert({
+          user_id: patientId,
+          document_type: documentKey,
+          document_url: getPatientDocuments(patient).find(d => d.key === documentKey)?.url || '',
+          status: 'approved'
+        });
+
+      if (historyError) {
+        console.error('Error inserting document history:', historyError);
+      }
+
+      // Remover documento da lista de rejeitados
+      const currentRejected = patient.rejected_documents || [];
+      const updatedRejected = currentRejected.filter((doc: string) => doc !== documentKey);
+
       const updateData: any = {
         rejected_documents: updatedRejected
       };
@@ -210,9 +225,7 @@ const PatientManagement = () => {
 
       toast({
         title: "Documento Aprovado",
-        description: updatedRejected.length === 0 
-          ? "Todos os documentos foram aprovados. Paciente liberado!"
-          : "Documento aprovado com sucesso.",
+        description: `Documento ${documentKey} foi aprovado com sucesso.`,
       });
 
       fetchPatients();
@@ -240,9 +253,23 @@ const PatientManagement = () => {
       return;
     }
 
-    const updatedRejected = [...currentRejected, documentKey];
-
     try {
+      // Registrar na document_history
+      const { error: historyError } = await supabase
+        .from('document_history')
+        .insert({
+          user_id: patientId,
+          document_type: documentKey,
+          document_url: getPatientDocuments(patient).find(d => d.key === documentKey)?.url || '',
+          status: 'rejected'
+        });
+
+      if (historyError) {
+        console.error('Error inserting document history:', historyError);
+      }
+
+      const updatedRejected = [...currentRejected, documentKey];
+
       const { error } = await supabase
         .from('profiles')
         .update({ 
@@ -256,7 +283,7 @@ const PatientManagement = () => {
 
       toast({
         title: "Documento Rejeitado",
-        description: "O documento foi rejeitado e o paciente deverá reenviá-lo.",
+        description: `Documento ${documentKey} foi rejeitado.`,
         variant: "destructive",
       });
 
@@ -266,6 +293,109 @@ const PatientManagement = () => {
       toast({
         title: "Erro",
         description: "Não foi possível rejeitar o documento.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleApproveMultiple = async (patientId: string, documentKeys: string[]) => {
+    const patient = patients.find(p => p.id === patientId);
+    if (!patient) return;
+
+    try {
+      // Registrar múltiplos documentos na document_history
+      const historyPromises = documentKeys.map(documentKey => 
+        supabase.from('document_history').insert({
+          user_id: patientId,
+          document_type: documentKey,
+          document_url: getPatientDocuments(patient).find(d => d.key === documentKey)?.url || '',
+          status: 'approved'
+        })
+      );
+
+      await Promise.all(historyPromises);
+
+      // Remover documentos da lista de rejeitados
+      const currentRejected = patient.rejected_documents || [];
+      const updatedRejected = currentRejected.filter((doc: string) => !documentKeys.includes(doc));
+
+      const updateData: any = {
+        rejected_documents: updatedRejected
+      };
+
+      // Se não há mais documentos rejeitados, aprovar completamente
+      if (updatedRejected.length === 0) {
+        updateData.status = 'approved';
+        updateData.rejection_reason = null;
+      }
+
+      const { error } = await supabase
+        .from('profiles')
+        .update(updateData)
+        .eq('id', patientId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Documentos Aprovados",
+        description: `${documentKeys.length} documento(s) aprovado(s) com sucesso.`,
+      });
+
+      fetchPatients();
+    } catch (error) {
+      console.error('Error approving multiple documents:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível aprovar os documentos selecionados.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRejectMultiple = async (patientId: string, documentKeys: string[]) => {
+    const patient = patients.find(p => p.id === patientId);
+    if (!patient) return;
+
+    try {
+      // Registrar múltiplos documentos na document_history
+      const historyPromises = documentKeys.map(documentKey => 
+        supabase.from('document_history').insert({
+          user_id: patientId,
+          document_type: documentKey,
+          document_url: getPatientDocuments(patient).find(d => d.key === documentKey)?.url || '',
+          status: 'rejected'
+        })
+      );
+
+      await Promise.all(historyPromises);
+
+      const currentRejected = patient.rejected_documents || [];
+      const newRejected = documentKeys.filter(key => !currentRejected.includes(key));
+      const updatedRejected = [...currentRejected, ...newRejected];
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          status: 'rejected',
+          rejected_documents: updatedRejected,
+          rejection_reason: patient.rejection_reason || `Documentos rejeitados: ${documentKeys.join(', ')}`
+        })
+        .eq('id', patientId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Documentos Rejeitados",
+        description: `${documentKeys.length} documento(s) rejeitado(s).`,
+        variant: "destructive",
+      });
+
+      fetchPatients();
+    } catch (error) {
+      console.error('Error rejecting multiple documents:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível rejeitar os documentos selecionados.",
         variant: "destructive",
       });
     }
@@ -445,7 +575,10 @@ const PatientManagement = () => {
                           documents={getPatientDocuments(patient)}
                           onApproveDocument={(docKey) => handleApproveDocument(patient.id, docKey)}
                           onRejectDocument={(docKey) => handleRejectDocument(patient.id, docKey)}
+                          onApproveMultiple={(docKeys) => handleApproveMultiple(patient.id, docKeys)}
+                          onRejectMultiple={(docKeys) => handleRejectMultiple(patient.id, docKeys)}
                           showActions={patient.status !== 'approved'}
+                          allowMultipleSelection={true}
                         />
                         
                         {patient.status === "pending" && (
