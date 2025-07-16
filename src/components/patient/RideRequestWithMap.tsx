@@ -8,7 +8,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Car, Calendar as CalendarIcon, MapPin } from 'lucide-react';
+import { Car, Calendar as CalendarIcon, MapPin, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import MapboxMap from '@/components/MapboxMap';
@@ -18,17 +18,27 @@ interface RideRequestWithMapProps {
   onRideCreated: () => void;
 }
 
+interface AddressSuggestion {
+  place_name: string;
+  center: [number, number];
+  context?: Array<{ id: string; text: string }>;
+}
+
 const RideRequestWithMap: React.FC<RideRequestWithMapProps> = ({
   currentLocation,
   onRideCreated
 }) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [loadingCurrentAddress, setLoadingCurrentAddress] = useState(false);
   const [favorites, setFavorites] = useState<any[]>([]);
   const [isScheduled, setIsScheduled] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
   const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
+  const [currentCity, setCurrentCity] = useState<string>('');
+  const [destinationSuggestions, setDestinationSuggestions] = useState<AddressSuggestion[]>([]);
+  const [showDestinationSuggestions, setShowDestinationSuggestions] = useState(false);
   const [rideData, setRideData] = useState({
     pickup_address: "",
     destination_address: "",
@@ -63,15 +73,105 @@ const RideRequestWithMap: React.FC<RideRequestWithMapProps> = ({
     }
   };
 
-  const geocodeAddresses = async () => {
+  const getMapboxToken = async () => {
     try {
       const { data: tokenData } = await supabase.functions.invoke('get-mapbox-token');
-      const token = tokenData?.token;
+      return tokenData?.token;
+    } catch (error) {
+      console.error('Error getting mapbox token:', error);
+      return null;
+    }
+  };
+
+  const reverseGeocode = async (lat: number, lng: number) => {
+    try {
+      const token = await getMapboxToken();
+      if (!token) return null;
+
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&country=BR&language=pt&types=address`
+      );
+      const data = await response.json();
       
+      if (data.features && data.features[0]) {
+        const feature = data.features[0];
+        
+        // Extrair componentes do endereço
+        const context = feature.context || [];
+        const neighborhood = context.find((c: any) => c.id.includes('neighborhood'))?.text || '';
+        const place = context.find((c: any) => c.id.includes('place'))?.text || '';
+        const region = context.find((c: any) => c.id.includes('region'))?.text || '';
+        
+        // Montar endereço completo
+        const addressParts = [];
+        if (feature.address) addressParts.push(feature.text + ', ' + feature.address);
+        else addressParts.push(feature.text);
+        if (neighborhood) addressParts.push(neighborhood);
+        if (place) addressParts.push(place);
+        if (region) addressParts.push(region);
+        
+        const fullAddress = addressParts.join(', ');
+        
+        // Guardar a cidade atual para filtrar destinos
+        if (place) {
+          setCurrentCity(place);
+        }
+        
+        return fullAddress;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error in reverse geocoding:', error);
+      return null;
+    }
+  };
+
+  const searchDestinations = async (query: string) => {
+    if (query.length < 3) {
+      setDestinationSuggestions([]);
+      return;
+    }
+
+    try {
+      const token = await getMapboxToken();
+      if (!token) return;
+
+      // Construir query de busca focando na cidade atual
+      let searchQuery = query;
+      if (currentCity) {
+        searchQuery = `${query} ${currentCity}`;
+      }
+
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(searchQuery)}.json?access_token=${token}&country=BR&language=pt&limit=5&types=poi,address&proximity=${currentLocation?.lng},${currentLocation?.lat}`
+      );
+      const data = await response.json();
+      
+      if (data.features) {
+        // Filtrar sugestões que estejam na mesma cidade
+        const filteredSuggestions = data.features.filter((feature: any) => {
+          if (!currentCity) return true;
+          
+          const context = feature.context || [];
+          const place = context.find((c: any) => c.id.includes('place'))?.text || '';
+          return place.toLowerCase().includes(currentCity.toLowerCase()) || 
+                 currentCity.toLowerCase().includes(place.toLowerCase());
+        });
+
+        setDestinationSuggestions(filteredSuggestions.slice(0, 5));
+      }
+    } catch (error) {
+      console.error('Error searching destinations:', error);
+    }
+  };
+
+  const geocodeAddresses = async () => {
+    try {
+      const token = await getMapboxToken();
       if (!token) return;
 
       // Geocode pickup address
-      if (rideData.pickup_address && rideData.pickup_address !== 'Localização Atual') {
+      if (rideData.pickup_address && !rideData.pickup_address.includes('Localização Atual')) {
         const pickupResponse = await fetch(
           `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(rideData.pickup_address)}.json?access_token=${token}&country=BR`
         );
@@ -156,6 +256,8 @@ const RideRequestWithMap: React.FC<RideRequestWithMapProps> = ({
       setIsScheduled(false);
       setPickupCoords(null);
       setDestinationCoords(null);
+      setCurrentCity('');
+      setDestinationSuggestions([]);
       onRideCreated();
 
     } catch (error) {
@@ -172,15 +274,64 @@ const RideRequestWithMap: React.FC<RideRequestWithMapProps> = ({
 
   const useFavoriteAddress = (address: string, field: 'pickup_address' | 'destination_address') => {
     setRideData(prev => ({ ...prev, [field]: address }));
+    if (field === 'destination_address') {
+      setShowDestinationSuggestions(false);
+    }
   };
 
-  const useCurrentLocation = () => {
-    if (currentLocation) {
-      setRideData(prev => ({ 
-        ...prev, 
-        pickup_address: `Localização Atual (${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)})` 
-      }));
+  const useCurrentLocation = async () => {
+    if (!currentLocation) {
+      toast({
+        title: "Erro",
+        description: "Localização atual não disponível.",
+        variant: "destructive",
+      });
+      return;
     }
+
+    setLoadingCurrentAddress(true);
+    
+    try {
+      const fullAddress = await reverseGeocode(currentLocation.lat, currentLocation.lng);
+      
+      if (fullAddress) {
+        setRideData(prev => ({ 
+          ...prev, 
+          pickup_address: fullAddress
+        }));
+        toast({
+          title: "Sucesso",
+          description: "Endereço atual carregado com sucesso!",
+        });
+      } else {
+        // Fallback para coordenadas se não conseguir obter endereço completo
+        setRideData(prev => ({ 
+          ...prev, 
+          pickup_address: `Localização Atual (${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)})` 
+        }));
+      }
+    } catch (error) {
+      console.error('Error getting current address:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível obter o endereço atual.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingCurrentAddress(false);
+    }
+  };
+
+  const handleDestinationChange = (value: string) => {
+    setRideData(prev => ({ ...prev, destination_address: value }));
+    setShowDestinationSuggestions(true);
+    searchDestinations(value);
+  };
+
+  const selectDestinationSuggestion = (suggestion: AddressSuggestion) => {
+    setRideData(prev => ({ ...prev, destination_address: suggestion.place_name }));
+    setShowDestinationSuggestions(false);
+    setDestinationSuggestions([]);
   };
 
   // Prepare map markers
@@ -247,8 +398,13 @@ const RideRequestWithMap: React.FC<RideRequestWithMapProps> = ({
                     type="button"
                     variant="outline"
                     onClick={useCurrentLocation}
+                    disabled={loadingCurrentAddress}
                   >
-                    Usar Atual
+                    {loadingCurrentAddress ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Usar Atual"
+                    )}
                   </Button>
                 )}
               </div>
@@ -273,15 +429,33 @@ const RideRequestWithMap: React.FC<RideRequestWithMapProps> = ({
               )}
             </div>
 
-            <div>
+            <div className="relative">
               <Label htmlFor="destination_address">Endereço de Destino</Label>
               <Input
                 id="destination_address"
                 value={rideData.destination_address}
-                onChange={(e) => setRideData({ ...rideData, destination_address: e.target.value })}
+                onChange={(e) => handleDestinationChange(e.target.value)}
+                onFocus={() => setShowDestinationSuggestions(true)}
                 placeholder="Digite o endereço de destino"
                 required
               />
+              
+              {/* Sugestões de destino */}
+              {showDestinationSuggestions && destinationSuggestions.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                  {destinationSuggestions.map((suggestion, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      className="w-full px-3 py-2 text-left hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                      onClick={() => selectDestinationSuggestion(suggestion)}
+                    >
+                      <div className="font-medium">{suggestion.place_name}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {favorites.length > 0 && (
                 <div className="mt-2">
                   <Label className="text-sm text-gray-600">Favoritos:</Label>
@@ -311,6 +485,7 @@ const RideRequestWithMap: React.FC<RideRequestWithMapProps> = ({
               </div>
               <p className="text-xs text-blue-600 mt-1">
                 Este é um serviço de transporte gratuito para pacientes do SUS.
+                {currentCity && ` Buscando destinos em ${currentCity} e região.`}
               </p>
             </div>
 
