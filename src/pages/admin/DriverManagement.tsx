@@ -10,6 +10,7 @@ import { Search, Eye, Check, X, Car, Phone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import DocumentViewer from "@/components/admin/DocumentViewer";
+import { getDocumentPublicUrl, isRelativePath } from "@/lib/documentUtils";
 
 const DriverManagement = () => {
   const { toast } = useToast();
@@ -81,15 +82,30 @@ const DriverManagement = () => {
   const getDriverDocuments = (driver: any) => {
     const driverInfo = driver.drivers?.[0];
     
-    return driverDocuments.map(doc => ({
-      key: doc.key,
-      label: doc.label,
-      url: doc.key === 'residence_proof' || doc.key === 'profile_photo' 
-        ? driver[doc.key] 
-        : driverInfo?.[doc.key] || null,
-      status: (driver.rejected_documents?.includes(doc.key) ? 'rejected' : 
-              driver.status === 'approved' ? 'approved' : 'pending') as 'approved' | 'rejected' | 'pending'
-    }));
+    return driverDocuments.map(doc => {
+      let rawUrl: string | null = null;
+      
+      // Determina de onde vem a URL do documento
+      if (doc.key === 'residence_proof' || doc.key === 'profile_photo') {
+        rawUrl = driver[doc.key];
+      } else {
+        rawUrl = driverInfo?.[doc.key] || null;
+      }
+
+      // Converte path relativo para URL pública se necessário
+      let finalUrl = rawUrl;
+      if (rawUrl && isRelativePath(rawUrl)) {
+        finalUrl = getDocumentPublicUrl(doc.key, rawUrl);
+      }
+
+      return {
+        key: doc.key,
+        label: doc.label,
+        url: finalUrl,
+        status: (driver.rejected_documents?.includes(doc.key) ? 'rejected' : 
+                driver.status === 'approved' ? 'approved' : 'pending') as 'approved' | 'rejected' | 'pending'
+      };
+    });
   };
 
   const handleApprove = async (driverId: string) => {

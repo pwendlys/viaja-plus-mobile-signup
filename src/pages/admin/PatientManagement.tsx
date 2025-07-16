@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,6 +10,7 @@ import { Search, Eye, Check, X, User, Phone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import DocumentViewer from "@/components/admin/DocumentViewer";
+import { getDocumentPublicUrl, isRelativePath } from "@/lib/documentUtils";
 
 const PatientManagement = () => {
   const { toast } = useToast();
@@ -78,15 +78,30 @@ const PatientManagement = () => {
   const getPatientDocuments = (patient: any) => {
     const patientInfo = patient.patients?.[0];
     
-    return patientDocuments.map(doc => ({
-      key: doc.key,
-      label: doc.label,
-      url: doc.key === 'sus_card' 
-        ? patientInfo?.[doc.key] || null
-        : patient[doc.key] || null,
-      status: (patient.rejected_documents?.includes(doc.key) ? 'rejected' : 
-              patient.status === 'approved' ? 'approved' : 'pending') as 'approved' | 'rejected' | 'pending'
-    }));
+    return patientDocuments.map(doc => {
+      let rawUrl: string | null = null;
+      
+      // Determina de onde vem a URL do documento
+      if (doc.key === 'sus_card') {
+        rawUrl = patientInfo?.[doc.key] || null;
+      } else {
+        rawUrl = patient[doc.key] || null;
+      }
+
+      // Converte path relativo para URL pública se necessário
+      let finalUrl = rawUrl;
+      if (rawUrl && isRelativePath(rawUrl)) {
+        finalUrl = getDocumentPublicUrl(doc.key, rawUrl);
+      }
+
+      return {
+        key: doc.key,
+        label: doc.label,
+        url: finalUrl,
+        status: (patient.rejected_documents?.includes(doc.key) ? 'rejected' : 
+                patient.status === 'approved' ? 'approved' : 'pending') as 'approved' | 'rejected' | 'pending'
+      };
+    });
   };
 
   const handleApprove = async (patientId: string) => {
