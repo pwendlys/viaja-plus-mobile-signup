@@ -84,8 +84,8 @@ const PatientManagement = () => {
       url: doc.key === 'sus_card' 
         ? patientInfo?.[doc.key] || null
         : patient[doc.key] || null,
-      status: patient.rejected_documents?.includes(doc.key) ? 'rejected' : 
-              patient.status === 'approved' ? 'approved' : 'pending'
+      status: (patient.rejected_documents?.includes(doc.key) ? 'rejected' : 
+              patient.status === 'approved' ? 'approved' : 'pending') as 'approved' | 'rejected' | 'pending'
     }));
   };
 

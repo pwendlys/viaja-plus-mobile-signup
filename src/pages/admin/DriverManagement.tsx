@@ -87,8 +87,8 @@ const DriverManagement = () => {
       url: doc.key === 'residence_proof' || doc.key === 'profile_photo' 
         ? driver[doc.key] 
         : driverInfo?.[doc.key] || null,
-      status: driver.rejected_documents?.includes(doc.key) ? 'rejected' : 
-              driver.status === 'approved' ? 'approved' : 'pending'
+      status: (driver.rejected_documents?.includes(doc.key) ? 'rejected' : 
+              driver.status === 'approved' ? 'approved' : 'pending') as 'approved' | 'rejected' | 'pending'
     }));
   };
 
