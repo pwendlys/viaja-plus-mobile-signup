@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,9 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, Eye, Check, X, Car, Phone, Mail, CreditCard, FileText } from "lucide-react";
+import { Search, Eye, Check, X, Car, Phone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import DocumentViewer from "@/components/admin/DocumentViewer";
 
 const DriverManagement = () => {
   const { toast } = useToast();
@@ -24,8 +24,8 @@ const DriverManagement = () => {
   const driverDocuments = [
     { key: 'residence_proof', label: 'Comprovante de Residência' },
     { key: 'profile_photo', label: 'Foto de Perfil' },
-    { key: 'cnh_front', label: 'CNH (Frente)' },
-    { key: 'cnh_back', label: 'CNH (Verso)' },
+    { key: 'cnh_front_photo', label: 'CNH (Frente)' },
+    { key: 'cnh_back_photo', label: 'CNH (Verso)' },
     { key: 'vehicle_document', label: 'Documento do Veículo' },
     { key: 'vehicle_photo', label: 'Foto do Veículo' },
     { key: 'selfie_with_document', label: 'Selfie com Documento' }
@@ -77,6 +77,20 @@ const DriverManagement = () => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  const getDriverDocuments = (driver: any) => {
+    const driverInfo = driver.drivers?.[0];
+    
+    return driverDocuments.map(doc => ({
+      key: doc.key,
+      label: doc.label,
+      url: doc.key === 'residence_proof' || doc.key === 'profile_photo' 
+        ? driver[doc.key] 
+        : driverInfo?.[doc.key] || null,
+      status: driver.rejected_documents?.includes(doc.key) ? 'rejected' : 
+              driver.status === 'approved' ? 'approved' : 'pending'
+    }));
+  };
 
   const handleApprove = async (driverId: string) => {
     try {
@@ -152,6 +166,94 @@ const DriverManagement = () => {
       toast({
         title: "Erro",
         description: "Não foi possível rejeitar o motorista.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleApproveDocument = async (driverId: string, documentKey: string) => {
+    const driver = drivers.find(d => d.id === driverId);
+    if (!driver) return;
+
+    const currentRejected = driver.rejected_documents || [];
+    const updatedRejected = currentRejected.filter((doc: string) => doc !== documentKey);
+
+    try {
+      const updateData: any = {
+        rejected_documents: updatedRejected
+      };
+
+      // Se não há mais documentos rejeitados, aprovar completamente
+      if (updatedRejected.length === 0) {
+        updateData.status = 'approved';
+        updateData.rejection_reason = null;
+      }
+
+      const { error } = await supabase
+        .from('profiles')
+        .update(updateData)
+        .eq('id', driverId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Documento Aprovado",
+        description: updatedRejected.length === 0 
+          ? "Todos os documentos foram aprovados. Motorista liberado!"
+          : "Documento aprovado com sucesso.",
+      });
+
+      fetchDrivers();
+    } catch (error) {
+      console.error('Error approving document:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível aprovar o documento.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRejectDocument = async (driverId: string, documentKey: string) => {
+    const driver = drivers.find(d => d.id === driverId);
+    if (!driver) return;
+
+    const currentRejected = driver.rejected_documents || [];
+    if (currentRejected.includes(documentKey)) {
+      toast({
+        title: "Documento já rejeitado",
+        description: "Este documento já está na lista de rejeitados.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const updatedRejected = [...currentRejected, documentKey];
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          status: 'rejected',
+          rejected_documents: updatedRejected,
+          rejection_reason: driver.rejection_reason || `Documento ${documentKey} rejeitado`
+        })
+        .eq('id', driverId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Documento Rejeitado",
+        description: "O documento foi rejeitado e o motorista deverá reenviá-lo.",
+        variant: "destructive",
+      });
+
+      fetchDrivers();
+    } catch (error) {
+      console.error('Error rejecting document:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível rejeitar o documento.",
         variant: "destructive",
       });
     }
@@ -283,11 +385,13 @@ const DriverManagement = () => {
                           Ver Detalhes
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="max-w-2xl">
+                      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
                           <DialogTitle>Detalhes do Motorista - {driver.full_name}</DialogTitle>
                         </DialogHeader>
-                        <div className="grid grid-cols-2 gap-4">
+                        
+                        {/* Informações Pessoais */}
+                        <div className="grid grid-cols-2 gap-4 mb-6">
                           <div>
                             <label className="text-sm font-medium">Nome Completo</label>
                             <p className="text-sm text-gray-600">{driver.full_name}</p>
@@ -351,6 +455,14 @@ const DriverManagement = () => {
                             </div>
                           )}
                         </div>
+
+                        {/* Visualizador de Documentos */}
+                        <DocumentViewer 
+                          documents={getDriverDocuments(driver)}
+                          onApproveDocument={(docKey) => handleApproveDocument(driver.id, docKey)}
+                          onRejectDocument={(docKey) => handleRejectDocument(driver.id, docKey)}
+                          showActions={driver.status !== 'approved'}
+                        />
                         
                         {driver.status === "pending" && (
                           <div className="flex flex-col gap-4 mt-6 pt-4 border-t">
@@ -360,7 +472,7 @@ const DriverManagement = () => {
                                 className="flex-1 bg-green-600 hover:bg-green-700"
                               >
                                 <Check className="w-4 h-4 mr-1" />
-                                Aprovar
+                                Aprovar Todos
                               </Button>
                               <Dialog>
                                 <DialogTrigger asChild>

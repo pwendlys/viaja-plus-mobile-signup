@@ -7,9 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, Eye, Check, X, User, Phone, Mail, FileText, RefreshCw } from "lucide-react";
+import { Search, Eye, Check, X, User, Phone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import DocumentViewer from "@/components/admin/DocumentViewer";
 
 const PatientManagement = () => {
   const { toast } = useToast();
@@ -74,6 +75,20 @@ const PatientManagement = () => {
     };
   }, []);
 
+  const getPatientDocuments = (patient: any) => {
+    const patientInfo = patient.patients?.[0];
+    
+    return patientDocuments.map(doc => ({
+      key: doc.key,
+      label: doc.label,
+      url: doc.key === 'sus_card' 
+        ? patientInfo?.[doc.key] || null
+        : patient[doc.key] || null,
+      status: patient.rejected_documents?.includes(doc.key) ? 'rejected' : 
+              patient.status === 'approved' ? 'approved' : 'pending'
+    }));
+  };
+
   const handleApprove = async (patientId: string) => {
     try {
       const { error } = await supabase
@@ -89,7 +104,7 @@ const PatientManagement = () => {
 
       toast({
         title: "Paciente Aprovado",
-        description: "O paciente foi aprovado com sucesso e pode acessar o sistema.",
+        description: "O paciente foi aprovado com sucesso.",
       });
       
       fetchPatients();
@@ -153,6 +168,94 @@ const PatientManagement = () => {
     }
   };
 
+  const handleApproveDocument = async (patientId: string, documentKey: string) => {
+    const patient = patients.find(p => p.id === patientId);
+    if (!patient) return;
+
+    const currentRejected = patient.rejected_documents || [];
+    const updatedRejected = currentRejected.filter((doc: string) => doc !== documentKey);
+
+    try {
+      const updateData: any = {
+        rejected_documents: updatedRejected
+      };
+
+      // Se não há mais documentos rejeitados, aprovar completamente
+      if (updatedRejected.length === 0) {
+        updateData.status = 'approved';
+        updateData.rejection_reason = null;
+      }
+
+      const { error } = await supabase
+        .from('profiles')
+        .update(updateData)
+        .eq('id', patientId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Documento Aprovado",
+        description: updatedRejected.length === 0 
+          ? "Todos os documentos foram aprovados. Paciente liberado!"
+          : "Documento aprovado com sucesso.",
+      });
+
+      fetchPatients();
+    } catch (error) {
+      console.error('Error approving document:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível aprovar o documento.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRejectDocument = async (patientId: string, documentKey: string) => {
+    const patient = patients.find(p => p.id === patientId);
+    if (!patient) return;
+
+    const currentRejected = patient.rejected_documents || [];
+    if (currentRejected.includes(documentKey)) {
+      toast({
+        title: "Documento já rejeitado",
+        description: "Este documento já está na lista de rejeitados.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const updatedRejected = [...currentRejected, documentKey];
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          status: 'rejected',
+          rejected_documents: updatedRejected,
+          rejection_reason: patient.rejection_reason || `Documento ${documentKey} rejeitado`
+        })
+        .eq('id', patientId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Documento Rejeitado",
+        description: "O documento foi rejeitado e o paciente deverá reenviá-lo.",
+        variant: "destructive",
+      });
+
+      fetchPatients();
+    } catch (error) {
+      console.error('Error rejecting document:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível rejeitar o documento.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleDocumentToggle = (documentKey: string, checked: boolean) => {
     if (checked) {
       setRejectedDocuments([...rejectedDocuments, documentKey]);
@@ -178,14 +281,6 @@ const PatientManagement = () => {
       default:
         return <Badge className="bg-yellow-100 text-yellow-800">Pendente</Badge>;
     }
-  };
-
-  const hasRecentResubmission = (patient: any) => {
-    if (!patient.last_resubmission_at) return false;
-    const resubmissionDate = new Date(patient.last_resubmission_at);
-    const now = new Date();
-    const diffInHours = (now.getTime() - resubmissionDate.getTime()) / (1000 * 60 * 60);
-    return diffInHours <= 24; // Mostrar como recente se foi nas últimas 24 horas
   };
 
   if (loading) {
@@ -246,7 +341,7 @@ const PatientManagement = () => {
           </Card>
         ) : (
           filteredPatients.map((patient) => (
-            <Card key={patient.id} className={hasRecentResubmission(patient) ? "ring-2 ring-blue-200 bg-blue-50" : ""}>
+            <Card key={patient.id}>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
@@ -254,36 +349,14 @@ const PatientManagement = () => {
                       <User className="w-6 h-6 text-green-600" />
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold">{patient.full_name}</h3>
-                        {hasRecentResubmission(patient) && (
-                          <Badge variant="outline" className="text-blue-600 border-blue-300 bg-blue-50">
-                            <RefreshCw className="w-3 h-3 mr-1" />
-                            Reenvio Recente
-                          </Badge>
-                        )}
-                      </div>
+                      <h3 className="font-semibold">{patient.full_name}</h3>
                       <p className="text-sm text-gray-600">CPF: {patient.cpf}</p>
                       <div className="flex items-center gap-4 mt-1">
                         <div className="flex items-center gap-1 text-sm text-gray-600">
                           <Phone className="h-3 w-3" />
                           {patient.phone}
                         </div>
-                        <div className="flex items-center gap-1 text-sm text-gray-600">
-                          <Mail className="h-3 w-3" />
-                          {patient.email}
-                        </div>
                       </div>
-                      {patient.resubmission_count > 0 && (
-                        <div className="mt-1">
-                          <p className="text-sm text-blue-600 font-medium">
-                            {patient.resubmission_count} reenvio(s) realizado(s)
-                            {patient.last_resubmission_at && (
-                              ` • Último: ${new Date(patient.last_resubmission_at).toLocaleDateString('pt-BR')}`
-                            )}
-                          </p>
-                        </div>
-                      )}
                       {patient.rejected_documents && patient.rejected_documents.length > 0 && (
                         <div className="mt-2">
                           <p className="text-sm text-red-600 font-medium">
@@ -303,11 +376,13 @@ const PatientManagement = () => {
                           Ver Detalhes
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="max-w-2xl">
+                      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
                           <DialogTitle>Detalhes do Paciente - {patient.full_name}</DialogTitle>
                         </DialogHeader>
-                        <div className="grid grid-cols-2 gap-4">
+                        
+                        {/* Informações Pessoais */}
+                        <div className="grid grid-cols-2 gap-4 mb-6">
                           <div>
                             <label className="text-sm font-medium">Nome Completo</label>
                             <p className="text-sm text-gray-600">{patient.full_name}</p>
@@ -330,31 +405,11 @@ const PatientManagement = () => {
                               {`${patient.street}, ${patient.number} - ${patient.neighborhood}, ${patient.city} - ${patient.state}`}
                             </p>
                           </div>
-                          {patient.patients?.[0] && (
-                            <>
-                              <div>
-                                <label className="text-sm font-medium">Cartão SUS</label>
-                                <p className="text-sm text-gray-600">{patient.patients[0].sus_card}</p>
-                              </div>
-                              <div>
-                                <label className="text-sm font-medium">Tem Dependência</label>
-                                <p className="text-sm text-gray-600">
-                                  {patient.patients[0].has_dependency ? 'Sim' : 'Não'}
-                                </p>
-                              </div>
-                              {patient.patients[0].dependency_description && (
-                                <div className="col-span-2">
-                                  <label className="text-sm font-medium">Descrição da Dependência</label>
-                                  <p className="text-sm text-gray-600">{patient.patients[0].dependency_description}</p>
-                                </div>
-                              )}
-                              {patient.patients[0].special_needs && (
-                                <div className="col-span-2">
-                                  <label className="text-sm font-medium">Necessidades Especiais</label>
-                                  <p className="text-sm text-gray-600">{patient.patients[0].special_needs}</p>
-                                </div>
-                              )}
-                            </>
+                          {patient.patients?.[0]?.special_needs && (
+                            <div className="col-span-2">
+                              <label className="text-sm font-medium">Necessidades Especiais</label>
+                              <p className="text-sm text-gray-600">{patient.patients[0].special_needs}</p>
+                            </div>
                           )}
                           <div>
                             <label className="text-sm font-medium">Data de Cadastro</label>
@@ -362,35 +417,21 @@ const PatientManagement = () => {
                               {new Date(patient.created_at).toLocaleDateString('pt-BR')}
                             </p>
                           </div>
-                          {patient.resubmission_count > 0 && (
-                            <div>
-                              <label className="text-sm font-medium">Reenvios</label>
-                              <p className="text-sm text-gray-600">
-                                {patient.resubmission_count} reenvio(s)
-                                {patient.last_resubmission_at && (
-                                  <br />
-                                )}
-                                {patient.last_resubmission_at && (
-                                  <span className="text-xs text-gray-500">
-                                    Último: {new Date(patient.last_resubmission_at).toLocaleString('pt-BR')}
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                          )}
                           {patient.rejection_reason && (
                             <div className="col-span-2">
                               <label className="text-sm font-medium">Motivo da Rejeição</label>
                               <p className="text-sm text-red-600">{patient.rejection_reason}</p>
                             </div>
                           )}
-                          {patient.rejected_documents && patient.rejected_documents.length > 0 && (
-                            <div className="col-span-2">
-                              <label className="text-sm font-medium">Documentos Rejeitados</label>
-                              <p className="text-sm text-red-600">{patient.rejected_documents.join(', ')}</p>
-                            </div>
-                          )}
                         </div>
+
+                        {/* Visualizador de Documentos */}
+                        <DocumentViewer 
+                          documents={getPatientDocuments(patient)}
+                          onApproveDocument={(docKey) => handleApproveDocument(patient.id, docKey)}
+                          onRejectDocument={(docKey) => handleRejectDocument(patient.id, docKey)}
+                          showActions={patient.status !== 'approved'}
+                        />
                         
                         {patient.status === "pending" && (
                           <div className="flex flex-col gap-4 mt-6 pt-4 border-t">
@@ -400,7 +441,7 @@ const PatientManagement = () => {
                                 className="flex-1 bg-green-600 hover:bg-green-700"
                               >
                                 <Check className="w-4 h-4 mr-1" />
-                                Aprovar
+                                Aprovar Todos
                               </Button>
                               <Dialog>
                                 <DialogTrigger asChild>
