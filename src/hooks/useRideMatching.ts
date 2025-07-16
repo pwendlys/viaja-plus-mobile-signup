@@ -106,27 +106,26 @@ export const useRideMatching = (driverId?: string, isOnline: boolean = false) =>
     }
   };
 
-  // Calculate distance and price
+  // Calculate distance and price using Mapbox
   const calculateRidePrice = async (pickup: string, destination: string, carType: 'common' | 'accessibility') => {
     try {
-      // Get pricing from database
-      const { data: pricing, error: pricingError } = await supabase
-        .from('km_pricing')
-        .select('price_per_km')
-        .eq('car_type', carType)
-        .single();
+      console.log('Calculating ride price for:', { pickup, destination, carType });
+      
+      const { data, error } = await supabase.functions.invoke('calculate-ride-price', {
+        body: {
+          pickup_address: pickup,
+          destination_address: destination,
+          car_type: carType
+        }
+      });
 
-      if (pricingError) throw pricingError;
+      if (error) {
+        console.error('Error from edge function:', error);
+        throw error;
+      }
 
-      // For now, we'll use a simple estimation
-      // In a real implementation, you'd use Mapbox Directions API
-      const estimatedDistance = 10; // km (placeholder)
-      const estimatedPrice = estimatedDistance * pricing.price_per_km;
-
-      return {
-        distance: estimatedDistance,
-        price: estimatedPrice
-      };
+      console.log('Price calculation result:', data);
+      return data;
     } catch (error) {
       console.error('Error calculating price:', error);
       return null;

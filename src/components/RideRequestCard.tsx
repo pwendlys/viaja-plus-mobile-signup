@@ -31,38 +31,49 @@ const RideRequestCard: React.FC<RideRequestCardProps> = ({
   isOnline,
   driverType = 'common'
 }) => {
-  const [estimatedPrice, setEstimatedPrice] = useState<number | null>(null);
+  const [calculatedPrice, setCalculatedPrice] = useState<number | null>(null);
+  const [distance, setDistance] = useState<number | null>(null);
+  const [duration, setDuration] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    calculatePrice();
+    calculateRealPrice();
   }, [ride.id, driverType]);
 
-  const calculatePrice = async () => {
+  const calculateRealPrice = async () => {
     try {
-      const { data: pricing, error } = await supabase
-        .from('km_pricing')
-        .select('price_per_km')
-        .eq('car_type', driverType)
-        .single();
-
-      if (error) throw error;
-
-      // Simple distance estimation (in a real app, use Mapbox Directions API)
-      const estimatedDistance = 8; // km placeholder
-      const calculatedPrice = estimatedDistance * pricing.price_per_km;
+      setLoading(true);
+      console.log('Calculating price for ride:', ride.id);
       
-      setEstimatedPrice(calculatedPrice);
+      const { data, error } = await supabase.functions.invoke('calculate-ride-price', {
+        body: {
+          pickup_address: ride.pickup_address,
+          destination_address: ride.destination_address,
+          car_type: driverType
+        }
+      });
 
-      // Update the ride with estimated price if not set
+      if (error) {
+        console.error('Error calculating price:', error);
+        return;
+      }
+
+      console.log('Price calculation result:', data);
+      setCalculatedPrice(data.total_price);
+      setDistance(data.distance_km);
+      setDuration(data.duration_minutes);
+
+      // Update the ride with calculated price if not set
       if (!ride.estimated_price) {
         await supabase
           .from('rides')
-          .update({ estimated_price: calculatedPrice })
+          .update({ estimated_price: data.total_price })
           .eq('id', ride.id);
       }
     } catch (error) {
       console.error('Error calculating price:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -86,6 +97,8 @@ const RideRequestCard: React.FC<RideRequestCardProps> = ({
       return `${rideDate.toLocaleDateString('pt-BR')} às ${time}`;
     }
   };
+
+  const displayPrice = calculatedPrice || ride.estimated_price || 0;
 
   return (
     <Card className={`${!isOnline ? 'opacity-50' : 'hover:shadow-md transition-shadow'}`}>
@@ -120,6 +133,14 @@ const RideRequestCard: React.FC<RideRequestCardProps> = ({
             </div>
           </div>
 
+          {/* Distance and Duration Info */}
+          {(distance || duration) && (
+            <div className="flex items-center justify-between text-sm text-gray-600">
+              {distance && <span>📏 {distance} km</span>}
+              {duration && <span>⏱️ {duration} min</span>}
+            </div>
+          )}
+
           {/* Time and Price */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1">
@@ -131,7 +152,8 @@ const RideRequestCard: React.FC<RideRequestCardProps> = ({
             <div className="flex items-center gap-1">
               <DollarSign className="w-4 h-4 text-green-600" />
               <span className="font-bold text-green-600">
-                R$ {(estimatedPrice || ride.estimated_price || 0).toFixed(2)}
+                R$ {displayPrice.toFixed(2)}
+                {loading && <span className="text-xs ml-1">(calculando...)</span>}
               </span>
             </div>
           </div>

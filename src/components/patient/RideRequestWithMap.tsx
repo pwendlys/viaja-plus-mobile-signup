@@ -8,7 +8,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Car, Calendar as CalendarIcon, MapPin, DollarSign } from 'lucide-react';
+import { Car, Calendar as CalendarIcon, MapPin } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import MapboxMap from '@/components/MapboxMap';
@@ -27,7 +27,6 @@ const RideRequestWithMap: React.FC<RideRequestWithMapProps> = ({
   const [favorites, setFavorites] = useState<any[]>([]);
   const [isScheduled, setIsScheduled] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>();
-  const [estimatedPrice, setEstimatedPrice] = useState<number | null>(null);
   const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
   const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
   const [rideData, setRideData] = useState({
@@ -43,7 +42,6 @@ const RideRequestWithMap: React.FC<RideRequestWithMapProps> = ({
 
   useEffect(() => {
     if (rideData.pickup_address && rideData.destination_address) {
-      calculatePrice();
       geocodeAddresses();
     }
   }, [rideData.pickup_address, rideData.destination_address]);
@@ -100,29 +98,6 @@ const RideRequestWithMap: React.FC<RideRequestWithMapProps> = ({
     }
   };
 
-  const calculatePrice = async () => {
-    if (!rideData.pickup_address || !rideData.destination_address) return;
-
-    try {
-      // Get common car pricing (patient doesn't choose car type)
-      const { data: pricing, error } = await supabase
-        .from('km_pricing')
-        .select('price_per_km')
-        .eq('car_type', 'common')
-        .single();
-
-      if (error) throw error;
-
-      // Simple distance estimation - in production, use Mapbox Directions API
-      const estimatedDistance = 10; // km
-      const calculatedPrice = estimatedDistance * pricing.price_per_km;
-      
-      setEstimatedPrice(calculatedPrice);
-    } catch (error) {
-      console.error('Error calculating price:', error);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rideData.pickup_address || !rideData.destination_address) {
@@ -154,7 +129,6 @@ const RideRequestWithMap: React.FC<RideRequestWithMapProps> = ({
         pickup_date: isScheduled && selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
         pickup_time: rideData.pickup_time || '00:00',
         scheduled_for: scheduledFor?.toISOString(),
-        estimated_price: estimatedPrice,
         status: isScheduled ? 'scheduled' : 'pending',
       };
 
@@ -180,7 +154,6 @@ const RideRequestWithMap: React.FC<RideRequestWithMapProps> = ({
       });
       setSelectedDate(undefined);
       setIsScheduled(false);
-      setEstimatedPrice(null);
       setPickupCoords(null);
       setDestinationCoords(null);
       onRideCreated();
@@ -330,21 +303,16 @@ const RideRequestWithMap: React.FC<RideRequestWithMapProps> = ({
               )}
             </div>
 
-            {/* Price Display */}
-            {estimatedPrice && (
-              <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-green-800">Valor Estimado:</span>
-                  <div className="flex items-center gap-1">
-                    <DollarSign className="w-4 h-4 text-green-600" />
-                    <span className="font-bold text-green-600">R$ {estimatedPrice.toFixed(2)}</span>
-                  </div>
-                </div>
-                <p className="text-xs text-green-600 mt-1">
-                  *Valor pode variar conforme a rota e tipo de veículo disponível
-                </p>
+            {/* Info sobre o serviço gratuito */}
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-center gap-2">
+                <Car className="w-4 h-4 text-blue-600" />
+                <span className="text-sm font-medium text-blue-800">Serviço Gratuito</span>
               </div>
-            )}
+              <p className="text-xs text-blue-600 mt-1">
+                Este é um serviço de transporte gratuito para pacientes do SUS.
+              </p>
+            </div>
 
             <div className="flex items-center space-x-2">
               <input
