@@ -138,13 +138,37 @@ const RegistrationStatus = () => {
     return documentNames[docType] || docType;
   };
 
-  const getRejectedDocuments = () => {
-    if (!profile?.rejected_documents) return [];
-    // Garantir que seja sempre um array
-    if (Array.isArray(profile.rejected_documents)) {
-      return profile.rejected_documents;
+  const getAvailableDocuments = () => {
+    if (profile.user_type === 'patient') {
+      return [
+        'residence_proof',
+        'profile_photo',
+        'sus_card'
+      ];
+    } else if (profile.user_type === 'driver') {
+      return [
+        'residence_proof',
+        'profile_photo',
+        'cnh_front',
+        'cnh_back',
+        'vehicle_document',
+        'vehicle_photo',
+        'selfie_with_document'
+      ];
     }
     return [];
+  };
+
+  const getRejectedDocuments = () => {
+    if (!profile?.rejected_documents || !Array.isArray(profile.rejected_documents)) {
+      // Se não há documentos específicos rejeitados mas o status é rejeitado,
+      // mostrar todos os documentos disponíveis para reenvio
+      if (profile?.status === 'rejected') {
+        return getAvailableDocuments();
+      }
+      return [];
+    }
+    return profile.rejected_documents;
   };
 
   const handleFileUpload = async (files: File[]) => {
@@ -184,13 +208,19 @@ const RegistrationStatus = () => {
       updateData.last_resubmission_at = new Date().toISOString();
       updateData.resubmission_count = (profile.resubmission_count || 0) + 1;
 
-      // Remover documento da lista de rejeitados
-      const currentRejected = getRejectedDocuments();
-      const updatedRejected = currentRejected.filter((doc: string) => doc !== selectedDocument);
-      updateData.rejected_documents = updatedRejected;
+      // Remover documento da lista de rejeitados se ele estava lá
+      const currentRejected = profile.rejected_documents || [];
+      if (Array.isArray(currentRejected)) {
+        const updatedRejected = currentRejected.filter((doc: string) => doc !== selectedDocument);
+        updateData.rejected_documents = updatedRejected;
 
-      // Se não há mais documentos rejeitados, voltar status para pending
-      if (updatedRejected.length === 0) {
+        // Se não há mais documentos rejeitados, voltar status para pending
+        if (updatedRejected.length === 0) {
+          updateData.status = 'pending';
+          updateData.rejection_reason = null;
+        }
+      } else {
+        // Se não havia lista específica de documentos rejeitados, manter o status como pending para nova análise
         updateData.status = 'pending';
         updateData.rejection_reason = null;
       }
@@ -397,63 +427,116 @@ const RegistrationStatus = () => {
         </Card>
 
         {/* Documentos Rejeitados - Área de Reenvio */}
-        {profile.status === 'rejected' && rejectedDocuments.length > 0 && (
+        {profile.status === 'rejected' && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-red-700">
                 <RefreshCw className="w-5 h-5" />
-                Documentos que Precisam ser Reenviados
+                Reenvio de Documentos
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {rejectedDocuments.map((docType: string) => (
-                  <div key={docType} className="border border-red-200 rounded-lg p-4 bg-red-50">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-red-600" />
-                        <span className="font-medium text-red-800">
-                          {getDocumentDisplayName(docType)}
-                        </span>
+                {rejectedDocuments.length > 0 ? (
+                  rejectedDocuments.map((docType: string) => (
+                    <div key={docType} className="border border-red-200 rounded-lg p-4 bg-red-50">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-red-600" />
+                          <span className="font-medium text-red-800">
+                            {getDocumentDisplayName(docType)}
+                          </span>
+                        </div>
+                        <Badge variant="outline" className="text-red-600 border-red-300">
+                          Reenvio Necessário
+                        </Badge>
                       </div>
-                      <Badge variant="outline" className="text-red-600 border-red-300">
-                        Reenvio Necessário
-                      </Badge>
+                      
+                      {selectedDocument === docType ? (
+                        <div className="space-y-3">
+                          <FileUpload
+                            label="Selecione o novo documento"
+                            accept="image/*,.pdf"
+                            multiple={false}
+                            required={true}
+                            onFileChange={handleFileUpload}
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedDocument(null)}
+                              disabled={resubmitting}
+                            >
+                              Cancelar
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => setSelectedDocument(docType)}
+                          className="bg-red-600 hover:bg-red-700"
+                          disabled={resubmitting}
+                        >
+                          <Upload className="w-4 h-4 mr-1" />
+                          Reenviar Documento
+                        </Button>
+                      )}
                     </div>
+                  ))
+                ) : (
+                  <div className="border border-red-200 rounded-lg p-4 bg-red-50">
+                    <p className="text-red-800 mb-4">
+                      Sua solicitação foi rejeitada. Você pode reenviar qualquer documento para nova análise.
+                    </p>
                     
-                    {selectedDocument === docType ? (
-                      <div className="space-y-3">
-                        <FileUpload
-                          label="Selecione o novo documento"
-                          accept="image/*,.pdf"
-                          multiple={false}
-                          required={true}
-                          onFileChange={handleFileUpload}
-                        />
-                        <div className="flex gap-2">
+                    {getAvailableDocuments().map((docType: string) => (
+                      <div key={docType} className="mb-3 last:mb-0">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-red-600" />
+                            <span className="font-medium text-red-800">
+                              {getDocumentDisplayName(docType)}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {selectedDocument === docType ? (
+                          <div className="space-y-3">
+                            <FileUpload
+                              label="Selecione o novo documento"
+                              accept="image/*,.pdf"
+                              multiple={false}
+                              required={true}
+                              onFileChange={handleFileUpload}
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setSelectedDocument(null)}
+                                disabled={resubmitting}
+                              >
+                                Cancelar
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
                           <Button
-                            variant="outline"
                             size="sm"
-                            onClick={() => setSelectedDocument(null)}
+                            onClick={() => setSelectedDocument(docType)}
+                            className="bg-red-600 hover:bg-red-700"
                             disabled={resubmitting}
                           >
-                            Cancelar
+                            <Upload className="w-4 h-4 mr-1" />
+                            Reenviar Documento
                           </Button>
-                        </div>
+                        )}
                       </div>
-                    ) : (
-                      <Button
-                        size="sm"
-                        onClick={() => setSelectedDocument(docType)}
-                        className="bg-red-600 hover:bg-red-700"
-                        disabled={resubmitting}
-                      >
-                        <Upload className="w-4 h-4 mr-1" />
-                        Reenviar Documento
-                      </Button>
-                    )}
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
           </Card>
