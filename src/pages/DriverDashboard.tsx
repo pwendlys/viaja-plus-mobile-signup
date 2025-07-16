@@ -19,10 +19,25 @@ const DriverDashboard = () => {
   const [driverData, setDriverData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
+  const [kmPricing, setKmPricing] = useState<any[]>([]);
 
   useEffect(() => {
     fetchDriverData();
+    fetchKmPricing();
   }, []);
+
+  const fetchKmPricing = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('km_pricing')
+        .select('*');
+
+      if (error) throw error;
+      setKmPricing(data || []);
+    } catch (error) {
+      console.error('Error fetching KM pricing:', error);
+    }
+  };
 
   const fetchDriverData = async () => {
     try {
@@ -87,6 +102,16 @@ const DriverDashboard = () => {
         variant: "destructive",
       });
     }
+  };
+
+  const getCurrentPrice = () => {
+    if (!driverData?.drivers?.[0]) return null;
+    
+    const driver = driverData.drivers[0];
+    const carType = driver.has_accessibility ? 'accessibility' : 'common';
+    const pricing = kmPricing.find(p => p.car_type === carType);
+    
+    return pricing?.price_per_km || null;
   };
 
   if (loading) {
@@ -170,17 +195,23 @@ const DriverDashboard = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Car className="w-5 h-5" />
-            Informações do Veículo
+            Dados do Veículo
           </CardTitle>
         </CardHeader>
         <CardContent>
           {driverData.drivers && driverData.drivers.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-gray-600">Veículo</p>
-                <p className="font-medium">
-                  {driverData.drivers[0].vehicle_make} {driverData.drivers[0].vehicle_model} ({driverData.drivers[0].vehicle_year})
-                </p>
+                <p className="text-sm text-gray-600">Marca</p>
+                <p className="font-medium">{driverData.drivers[0].vehicle_make}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Modelo</p>
+                <p className="font-medium">{driverData.drivers[0].vehicle_model}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Ano</p>
+                <p className="font-medium">{driverData.drivers[0].vehicle_year}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Placa</p>
@@ -191,17 +222,21 @@ const DriverDashboard = () => {
                 <p className="font-medium">{driverData.drivers[0].vehicle_color}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-600">Tipo</p>
-                <Badge variant={driverData.drivers[0].has_accessibility ? "default" : "secondary"}>
-                  {driverData.drivers[0].has_accessibility ? "Acessível" : "Comum"}
-                </Badge>
+                <p className="text-sm text-gray-600">Preço Por KM</p>
+                <p className="font-medium">
+                  {getCurrentPrice() ? `R$ ${getCurrentPrice().toFixed(2)}` : 'Não definido'}
+                </p>
               </div>
-              {driverData.drivers[0].custom_price_per_km && (
-                <div>
-                  <p className="text-sm text-gray-600">Preço por KM</p>
-                  <p className="font-medium">R$ {driverData.drivers[0].custom_price_per_km}</p>
+              <div className="md:col-span-2">
+                <div className="flex items-center gap-2">
+                  <div className={`w-3 h-3 rounded-full ${
+                    driverData.drivers[0].has_accessibility ? 'bg-blue-500' : 'bg-gray-400'
+                  }`} />
+                  <span className="font-medium">
+                    {driverData.drivers[0].has_accessibility ? 'Veículo Acessível' : 'Veículo Comum'}
+                  </span>
                 </div>
-              )}
+              </div>
             </div>
           ) : (
             <div className="text-center py-4">
