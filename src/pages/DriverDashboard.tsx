@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Car, DollarSign, User, Star, Bell, Share2 } from "lucide-react";
+import { MapPin, Car, DollarSign, User, Star, Bell, Power, PowerOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import DriverRideRequests from "@/components/driver/DriverRideRequests";
@@ -18,11 +18,10 @@ const DriverDashboard = () => {
   const [activeTab, setActiveTab] = useState("rides");
   const [driverData, setDriverData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [isOnline, setIsOnline] = useState(false);
 
   useEffect(() => {
     fetchDriverData();
-    getCurrentLocation();
   }, []);
 
   const fetchDriverData = async () => {
@@ -41,6 +40,10 @@ const DriverDashboard = () => {
 
       if (profileError) throw profileError;
       setDriverData(profile);
+      
+      // Verificar se há um status online salvo
+      const savedStatus = localStorage.getItem(`driver_online_${user.id}`);
+      setIsOnline(savedStatus === 'true');
     } catch (error) {
       console.error('Error fetching driver data:', error);
       toast({
@@ -53,35 +56,37 @@ const DriverDashboard = () => {
     }
   };
 
-  const getCurrentLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-          });
-        },
-        (error) => {
-          console.error('Error getting location:', error);
-        }
-      );
-    }
-  };
+  const toggleOnlineStatus = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-  const shareLocationWhatsApp = () => {
-    if (!location) {
+      const newStatus = !isOnline;
+      setIsOnline(newStatus);
+      
+      // Salvar status no localStorage
+      localStorage.setItem(`driver_online_${user.id}`, newStatus.toString());
+      
+      // Atualizar status no banco de dados se necessário
+      await supabase
+        .from('profiles')
+        .update({ is_active: newStatus })
+        .eq('id', user.id);
+
       toast({
-        title: "Localização não disponível",
-        description: "Não foi possível obter sua localização atual.",
+        title: newStatus ? "Você está ONLINE" : "Você está OFFLINE",
+        description: newStatus 
+          ? "Você receberá notificações de corridas disponíveis." 
+          : "Você não receberá notificações de corridas.",
+      });
+    } catch (error) {
+      console.error('Error updating online status:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar seu status.",
         variant: "destructive",
       });
-      return;
     }
-
-    const message = `Olá! Estou aqui: https://maps.google.com/?q=${location.lat},${location.lng}`;
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
   };
 
   if (loading) {
@@ -118,11 +123,47 @@ const DriverDashboard = () => {
           <h1 className="text-3xl font-bold text-gray-900">Painel do Motorista</h1>
           <p className="text-gray-600">Bem-vindo, {driverData.full_name}</p>
         </div>
-        <Button onClick={shareLocationWhatsApp} className="flex items-center gap-2">
-          <Share2 className="w-4 h-4" />
-          Compartilhar Localização
+        <Button 
+          onClick={toggleOnlineStatus}
+          className={`flex items-center gap-2 ${
+            isOnline 
+              ? 'bg-green-600 hover:bg-green-700' 
+              : 'bg-gray-600 hover:bg-gray-700'
+          }`}
+        >
+          {isOnline ? (
+            <>
+              <Power className="w-4 h-4" />
+              ONLINE
+            </>
+          ) : (
+            <>
+              <PowerOff className="w-4 h-4" />
+              OFFLINE
+            </>
+          )}
         </Button>
       </div>
+
+      {/* Status Online/Offline */}
+      <Card className={isOnline ? "border-green-200 bg-green-50" : "border-gray-200 bg-gray-50"}>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className={`w-3 h-3 rounded-full ${isOnline ? 'bg-green-500' : 'bg-gray-500'}`} />
+              <span className="font-medium">
+                Status: {isOnline ? 'Online' : 'Offline'}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600">
+              {isOnline 
+                ? 'Você receberá notificações de corridas disponíveis' 
+                : 'Você não receberá notificações de corridas'
+              }
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Informações do Veículo */}
       <Card>
@@ -133,24 +174,41 @@ const DriverDashboard = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <p className="text-sm text-gray-600">Veículo</p>
-              <p className="font-medium">
-                {driverData.drivers?.[0]?.vehicle_make} {driverData.drivers?.[0]?.vehicle_model} ({driverData.drivers?.[0]?.vehicle_year})
-              </p>
+          {driverData.drivers && driverData.drivers.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <p className="text-sm text-gray-600">Veículo</p>
+                <p className="font-medium">
+                  {driverData.drivers[0].vehicle_make} {driverData.drivers[0].vehicle_model} ({driverData.drivers[0].vehicle_year})
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Placa</p>
+                <p className="font-medium">{driverData.drivers[0].vehicle_plate}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Cor</p>
+                <p className="font-medium">{driverData.drivers[0].vehicle_color}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Tipo</p>
+                <Badge variant={driverData.drivers[0].has_accessibility ? "default" : "secondary"}>
+                  {driverData.drivers[0].has_accessibility ? "Acessível" : "Comum"}
+                </Badge>
+              </div>
+              {driverData.drivers[0].custom_price_per_km && (
+                <div>
+                  <p className="text-sm text-gray-600">Preço por KM</p>
+                  <p className="font-medium">R$ {driverData.drivers[0].custom_price_per_km}</p>
+                </div>
+              )}
             </div>
-            <div>
-              <p className="text-sm text-gray-600">Placa</p>
-              <p className="font-medium">{driverData.drivers?.[0]?.vehicle_plate}</p>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-gray-500">Nenhuma informação de veículo encontrada.</p>
+              <p className="text-sm text-gray-400">Complete seu cadastro na aba "Perfil".</p>
             </div>
-            <div>
-              <p className="text-sm text-gray-600">Tipo</p>
-              <Badge variant={driverData.drivers?.[0]?.has_accessibility ? "default" : "secondary"}>
-                {driverData.drivers?.[0]?.has_accessibility ? "Acessível" : "Comum"}
-              </Badge>
-            </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
@@ -174,7 +232,7 @@ const DriverDashboard = () => {
 
       {/* Abas Principais */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="rides" className="flex items-center gap-2">
             <Car className="w-4 h-4" />
             Corridas
@@ -198,7 +256,7 @@ const DriverDashboard = () => {
         </TabsList>
 
         <TabsContent value="rides" className="mt-6">
-          <DriverRideRequests driverData={driverData} />
+          <DriverRideRequests driverData={driverData} isOnline={isOnline} />
         </TabsContent>
 
         <TabsContent value="financial" className="mt-6">

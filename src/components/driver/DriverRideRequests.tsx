@@ -3,15 +3,16 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Clock, User, Phone, DollarSign } from "lucide-react";
+import { MapPin, Clock, User, Phone, DollarSign, WifiOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
 interface DriverRideRequestsProps {
   driverData: any;
+  isOnline?: boolean;
 }
 
-const DriverRideRequests = ({ driverData }: DriverRideRequestsProps) => {
+const DriverRideRequests = ({ driverData, isOnline = false }: DriverRideRequestsProps) => {
   const { toast } = useToast();
   const [availableRides, setAvailableRides] = useState<any[]>([]);
   const [activeRides, setActiveRides] = useState<any[]>([]);
@@ -20,22 +21,24 @@ const DriverRideRequests = ({ driverData }: DriverRideRequestsProps) => {
   useEffect(() => {
     fetchRides();
 
-    // Configurar realtime para corridas
-    const channel = supabase
-      .channel('driver-rides-changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'rides'
-      }, () => {
-        fetchRides();
-      })
-      .subscribe();
+    // Configurar realtime para corridas apenas se estiver online
+    if (isOnline) {
+      const channel = supabase
+        .channel('driver-rides-changes')
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'rides'
+        }, () => {
+          fetchRides();
+        })
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [isOnline]);
 
   const fetchRides = async () => {
     try {
@@ -80,6 +83,15 @@ const DriverRideRequests = ({ driverData }: DriverRideRequestsProps) => {
   };
 
   const acceptRide = async (rideId: string) => {
+    if (!isOnline) {
+      toast({
+        title: "Você está offline",
+        description: "Ative o status online para aceitar corridas.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('rides')
@@ -157,6 +169,21 @@ const DriverRideRequests = ({ driverData }: DriverRideRequestsProps) => {
 
   return (
     <div className="space-y-6">
+      {/* Aviso de Status Offline */}
+      {!isOnline && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-orange-800">
+              <WifiOff className="w-5 h-5" />
+              <p className="font-medium">Você está offline</p>
+            </div>
+            <p className="text-sm text-orange-600 mt-1">
+              Ative o status online no topo da página para receber e aceitar corridas.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Corridas Ativas */}
       {activeRides.length > 0 && (
         <div>
@@ -242,7 +269,7 @@ const DriverRideRequests = ({ driverData }: DriverRideRequestsProps) => {
         ) : (
           <div className="space-y-4">
             {availableRides.map((ride) => (
-              <Card key={ride.id}>
+              <Card key={ride.id} className={!isOnline ? "opacity-50" : ""}>
                 <CardContent className="p-4">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
@@ -280,9 +307,10 @@ const DriverRideRequests = ({ driverData }: DriverRideRequestsProps) => {
                       {getStatusBadge(ride.status)}
                       <Button 
                         onClick={() => acceptRide(ride.id)}
-                        className="bg-green-600 hover:bg-green-700"
+                        disabled={!isOnline}
+                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
                       >
-                        Aceitar Corrida
+                        {isOnline ? 'Aceitar Corrida' : 'Offline'}
                       </Button>
                     </div>
                   </div>
