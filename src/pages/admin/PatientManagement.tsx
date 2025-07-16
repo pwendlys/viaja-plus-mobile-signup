@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, Eye, Check, X, User, Phone, Mail, FileText } from "lucide-react";
+import { Search, Eye, Check, X, User, Phone, Mail, FileText, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -89,7 +89,7 @@ const PatientManagement = () => {
 
       toast({
         title: "Paciente Aprovado",
-        description: "O paciente foi aprovado com sucesso.",
+        description: "O paciente foi aprovado com sucesso e pode acessar o sistema.",
       });
       
       fetchPatients();
@@ -180,6 +180,14 @@ const PatientManagement = () => {
     }
   };
 
+  const hasRecentResubmission = (patient: any) => {
+    if (!patient.last_resubmission_at) return false;
+    const resubmissionDate = new Date(patient.last_resubmission_at);
+    const now = new Date();
+    const diffInHours = (now.getTime() - resubmissionDate.getTime()) / (1000 * 60 * 60);
+    return diffInHours <= 24; // Mostrar como recente se foi nas últimas 24 horas
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -238,7 +246,7 @@ const PatientManagement = () => {
           </Card>
         ) : (
           filteredPatients.map((patient) => (
-            <Card key={patient.id}>
+            <Card key={patient.id} className={hasRecentResubmission(patient) ? "ring-2 ring-blue-200 bg-blue-50" : ""}>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
@@ -246,7 +254,15 @@ const PatientManagement = () => {
                       <User className="w-6 h-6 text-green-600" />
                     </div>
                     <div>
-                      <h3 className="font-semibold">{patient.full_name}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold">{patient.full_name}</h3>
+                        {hasRecentResubmission(patient) && (
+                          <Badge variant="outline" className="text-blue-600 border-blue-300 bg-blue-50">
+                            <RefreshCw className="w-3 h-3 mr-1" />
+                            Reenvio Recente
+                          </Badge>
+                        )}
+                      </div>
                       <p className="text-sm text-gray-600">CPF: {patient.cpf}</p>
                       <div className="flex items-center gap-4 mt-1">
                         <div className="flex items-center gap-1 text-sm text-gray-600">
@@ -258,6 +274,16 @@ const PatientManagement = () => {
                           {patient.email}
                         </div>
                       </div>
+                      {patient.resubmission_count > 0 && (
+                        <div className="mt-1">
+                          <p className="text-sm text-blue-600 font-medium">
+                            {patient.resubmission_count} reenvio(s) realizado(s)
+                            {patient.last_resubmission_at && (
+                              ` • Último: ${new Date(patient.last_resubmission_at).toLocaleDateString('pt-BR')}`
+                            )}
+                          </p>
+                        </div>
+                      )}
                       {patient.rejected_documents && patient.rejected_documents.length > 0 && (
                         <div className="mt-2">
                           <p className="text-sm text-red-600 font-medium">
@@ -336,6 +362,22 @@ const PatientManagement = () => {
                               {new Date(patient.created_at).toLocaleDateString('pt-BR')}
                             </p>
                           </div>
+                          {patient.resubmission_count > 0 && (
+                            <div>
+                              <label className="text-sm font-medium">Reenvios</label>
+                              <p className="text-sm text-gray-600">
+                                {patient.resubmission_count} reenvio(s)
+                                {patient.last_resubmission_at && (
+                                  <br />
+                                )}
+                                {patient.last_resubmission_at && (
+                                  <span className="text-xs text-gray-500">
+                                    Último: {new Date(patient.last_resubmission_at).toLocaleString('pt-BR')}
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                          )}
                           {patient.rejection_reason && (
                             <div className="col-span-2">
                               <label className="text-sm font-medium">Motivo da Rejeição</label>

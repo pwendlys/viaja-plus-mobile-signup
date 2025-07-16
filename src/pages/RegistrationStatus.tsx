@@ -237,7 +237,7 @@ const RegistrationStatus = () => {
         throw updateError;
       }
 
-      // Registrar no histórico
+      // Registrar no histórico para que apareça no painel administrativo
       const historyData = {
         user_id: profile.id,
         document_type: selectedDocument,
@@ -259,7 +259,7 @@ const RegistrationStatus = () => {
 
       toast({
         title: "Documento Reenviado",
-        description: `${getDocumentDisplayName(selectedDocument)} foi reenviado com sucesso.`,
+        description: `${getDocumentDisplayName(selectedDocument)} foi reenviado com sucesso e está aguardando nova análise.`,
       });
 
       setSelectedDocument(null);
@@ -329,10 +329,6 @@ const RegistrationStatus = () => {
   }
 
   const rejectedDocuments = getRejectedDocuments();
-
-  console.log('Profile data:', profile);
-  console.log('Rejected documents:', rejectedDocuments);
-  console.log('Profile status:', profile.status);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
@@ -538,24 +534,6 @@ const RegistrationStatus = () => {
                   </div>
                 )}
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Debug - mostrar dados do perfil em desenvolvimento */}
-        {process.env.NODE_ENV === 'development' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Debug - Dados do Perfil</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <pre className="text-xs bg-gray-100 p-2 rounded overflow-auto">
-                {JSON.stringify({ 
-                  status: profile.status, 
-                  rejected_documents: profile.rejected_documents,
-                  rejection_reason: profile.rejection_reason 
-                }, null, 2)}
-              </pre>
             </CardContent>
           </Card>
         )}
