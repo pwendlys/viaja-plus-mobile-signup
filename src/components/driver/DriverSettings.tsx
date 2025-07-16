@@ -50,7 +50,61 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
 
   useEffect(() => {
     fetchKmPricing();
-  }, []);
+    // Set up real-time subscription for driver updates
+    const subscription = supabase
+      .channel('driver-profile-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'profiles'
+      }, () => {
+        console.log('Profile updated, refreshing data...');
+        onUpdate();
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'drivers'
+      }, () => {
+        console.log('Driver data updated, refreshing data...');
+        onUpdate();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, [onUpdate]);
+
+  // Update local state when driverData prop changes
+  useEffect(() => {
+    if (driverData) {
+      setProfileData({
+        full_name: driverData.full_name || "",
+        phone: driverData.phone || "",
+        cpf: driverData.cpf || "",
+        email: driverData.email || "",
+        birth_date: driverData.birth_date || "",
+        cep: driverData.cep || "",
+        street: driverData.street || "",
+        number: driverData.number || "",
+        neighborhood: driverData.neighborhood || "",
+        city: driverData.city || "",
+        state: driverData.state || "",
+        complement: driverData.complement || "",
+      });
+
+      setDriverDetails({
+        cnh_number: driverData.drivers?.[0]?.cnh_number || "",
+        vehicle_make: driverData.drivers?.[0]?.vehicle_make || "",
+        vehicle_model: driverData.drivers?.[0]?.vehicle_model || "",
+        vehicle_year: driverData.drivers?.[0]?.vehicle_year || "",
+        vehicle_plate: driverData.drivers?.[0]?.vehicle_plate || "",
+        vehicle_color: driverData.drivers?.[0]?.vehicle_color || "",
+        has_accessibility: driverData.drivers?.[0]?.has_accessibility || false,
+      });
+    }
+  }, [driverData]);
 
   const fetchKmPricing = async () => {
     try {
@@ -74,6 +128,7 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
   const updateProfile = async () => {
     setLoading(true);
     try {
+      // Update profile
       const { error: profileError } = await supabase
         .from('profiles')
         .update(profileData)
@@ -81,18 +136,34 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
 
       if (profileError) throw profileError;
 
-      const { error: driverError } = await supabase
+      // Update or insert driver data
+      const { data: existingDriver } = await supabase
         .from('drivers')
-        .update(driverDetails)
-        .eq('id', driverData.id);
+        .select('id')
+        .eq('id', driverData.id)
+        .single();
 
-      if (driverError) throw driverError;
+      if (existingDriver) {
+        const { error: driverError } = await supabase
+          .from('drivers')
+          .update(driverDetails)
+          .eq('id', driverData.id);
+
+        if (driverError) throw driverError;
+      } else {
+        const { error: driverError } = await supabase
+          .from('drivers')
+          .insert({ ...driverDetails, id: driverData.id });
+
+        if (driverError) throw driverError;
+      }
 
       toast({
         title: "Perfil atualizado",
-        description: "Suas informações foram atualizadas com sucesso.",
+        description: "Suas informações foram atualizadas com sucesso. Você agora pode receber corridas!",
       });
 
+      // Force refresh parent data
       onUpdate();
     } catch (error) {
       console.error('Error updating profile:', error);
@@ -138,6 +209,7 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
         description: "Documento foi carregado com sucesso.",
       });
 
+      // Force refresh parent data
       onUpdate();
     } catch (error) {
       console.error('Error uploading file:', error);
@@ -149,8 +221,33 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
     }
   };
 
+  // Check if driver has complete vehicle information
+  const hasCompleteVehicleInfo = () => {
+    return driverDetails.cnh_number && 
+           driverDetails.vehicle_make && 
+           driverDetails.vehicle_model && 
+           driverDetails.vehicle_year && 
+           driverDetails.vehicle_plate && 
+           driverDetails.vehicle_color;
+  };
+
   return (
     <div className="space-y-6">
+      {/* Status do Perfil */}
+      {hasCompleteVehicleInfo() && (
+        <Card className="border-green-200 bg-green-50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-green-800">
+              <Car className="w-5 h-5" />
+              <p className="font-medium">Perfil Completo!</p>
+            </div>
+            <p className="text-sm text-green-600 mt-1">
+              Seu veículo está cadastrado e você pode receber corridas.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Informações Pessoais */}
       <Card>
         <CardHeader>

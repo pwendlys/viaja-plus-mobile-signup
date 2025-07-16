@@ -24,6 +24,31 @@ const DriverDashboard = () => {
   useEffect(() => {
     fetchDriverData();
     fetchKmPricing();
+    
+    // Set up real-time subscription for driver data updates
+    const subscription = supabase
+      .channel('driver-dashboard-updates')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'profiles'
+      }, (payload) => {
+        console.log('Profile changed, refreshing driver data...', payload);
+        fetchDriverData();
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'drivers'
+      }, (payload) => {
+        console.log('Driver data changed, refreshing driver data...', payload);
+        fetchDriverData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
   }, []);
 
   const fetchKmPricing = async () => {
@@ -54,6 +79,8 @@ const DriverDashboard = () => {
         .single();
 
       if (profileError) throw profileError;
+      
+      console.log('Driver data fetched:', profile);
       setDriverData(profile);
       
       // Verificar se há um status online salvo
@@ -114,6 +141,19 @@ const DriverDashboard = () => {
     return pricing?.price_per_km || null;
   };
 
+  // Check if driver has complete vehicle information to receive rides
+  const hasCompleteVehicleInfo = () => {
+    const driver = driverData?.drivers?.[0];
+    if (!driver) return false;
+    
+    return driver.cnh_number && 
+           driver.vehicle_make && 
+           driver.vehicle_model && 
+           driver.vehicle_year && 
+           driver.vehicle_plate && 
+           driver.vehicle_color;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -150,11 +190,12 @@ const DriverDashboard = () => {
         </div>
         <Button 
           onClick={toggleOnlineStatus}
+          disabled={!hasCompleteVehicleInfo()}
           className={`flex items-center gap-2 ${
             isOnline 
               ? 'bg-green-600 hover:bg-green-700' 
               : 'bg-gray-600 hover:bg-gray-700'
-          }`}
+          } ${!hasCompleteVehicleInfo() ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           {isOnline ? (
             <>
@@ -170,6 +211,21 @@ const DriverDashboard = () => {
         </Button>
       </div>
 
+      {/* Aviso se não tem dados completos do veículo */}
+      {!hasCompleteVehicleInfo() && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-orange-800">
+              <Car className="w-5 h-5" />
+              <p className="font-medium">Complete seu perfil para receber corridas</p>
+            </div>
+            <p className="text-sm text-orange-600 mt-1">
+              Preencha todas as informações do veículo na aba "Perfil" para começar a receber corridas.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Status Online/Offline */}
       <Card className={isOnline ? "border-green-200 bg-green-50" : "border-gray-200 bg-gray-50"}>
         <CardContent className="p-4">
@@ -183,7 +239,9 @@ const DriverDashboard = () => {
             <p className="text-sm text-gray-600">
               {isOnline 
                 ? 'Você receberá notificações de corridas disponíveis' 
-                : 'Você não receberá notificações de corridas'
+                : hasCompleteVehicleInfo() 
+                  ? 'Você não receberá notificações de corridas'
+                  : 'Complete seu perfil para ficar online'
               }
             </p>
           </div>
@@ -203,23 +261,23 @@ const DriverDashboard = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-gray-600">Marca</p>
-                <p className="font-medium">{driverData.drivers[0].vehicle_make}</p>
+                <p className="font-medium">{driverData.drivers[0].vehicle_make || 'Não informado'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Modelo</p>
-                <p className="font-medium">{driverData.drivers[0].vehicle_model}</p>
+                <p className="font-medium">{driverData.drivers[0].vehicle_model || 'Não informado'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Ano</p>
-                <p className="font-medium">{driverData.drivers[0].vehicle_year}</p>
+                <p className="font-medium">{driverData.drivers[0].vehicle_year || 'Não informado'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Placa</p>
-                <p className="font-medium">{driverData.drivers[0].vehicle_plate}</p>
+                <p className="font-medium">{driverData.drivers[0].vehicle_plate || 'Não informado'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Cor</p>
-                <p className="font-medium">{driverData.drivers[0].vehicle_color}</p>
+                <p className="font-medium">{driverData.drivers[0].vehicle_color || 'Não informado'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Preço Por KM</p>
@@ -273,7 +331,7 @@ const DriverDashboard = () => {
         </TabsList>
 
         <TabsContent value="rides" className="mt-6">
-          <DriverRideRequestsWithMap driverData={driverData} isOnline={isOnline} />
+          <DriverRideRequestsWithMap driverData={driverData} isOnline={isOnline && hasCompleteVehicleInfo()} />
         </TabsContent>
 
         <TabsContent value="financial" className="mt-6">
