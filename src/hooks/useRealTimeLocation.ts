@@ -82,6 +82,7 @@ export const useRealTimeLocation = ({
           user_id: userId,
           latitude: location.lat,
           longitude: location.lng,
+          user_type: 'driver', // Default to driver, can be made dynamic
           updated_at: new Date().toISOString()
         });
 

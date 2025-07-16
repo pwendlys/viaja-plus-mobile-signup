@@ -7,6 +7,7 @@ import { useRideMatching } from "@/hooks/useRideMatching";
 import { useRealTimeLocation } from "@/hooks/useRealTimeLocation";
 import RideRequestCard from "@/components/RideRequestCard";
 import MapboxMap from "@/components/MapboxMap";
+import { supabase } from "@/integrations/supabase/client";
 
 interface DriverRideRequestsWithMapProps {
   driverData: any;

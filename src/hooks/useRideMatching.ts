@@ -15,7 +15,7 @@ interface RideRequest {
   patient?: {
     full_name: string;
     phone: string;
-  };
+  } | null;
 }
 
 export const useRideMatching = (driverId?: string, isOnline: boolean = false) => {
@@ -30,14 +30,21 @@ export const useRideMatching = (driverId?: string, isOnline: boolean = false) =>
         .from('rides')
         .select(`
           *,
-          patient:patient_id(full_name, phone)
+          patient:profiles!rides_patient_id_fkey(full_name, phone)
         `)
         .is('driver_id', null)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setAvailableRides(rides || []);
+      
+      // Transform the data to match our interface
+      const transformedRides: RideRequest[] = (rides || []).map(ride => ({
+        ...ride,
+        patient: Array.isArray(ride.patient) ? ride.patient[0] : ride.patient
+      }));
+      
+      setAvailableRides(transformedRides);
     } catch (error) {
       console.error('Error fetching rides:', error);
     } finally {
