@@ -4,10 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Car, DollarSign, User, Star, Bell, Power, PowerOff } from "lucide-react";
+import { Car, DollarSign, User, Star, Bell, Power, PowerOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import DriverRideRequests from "@/components/driver/DriverRideRequests";
+import DriverRideRequestsWithMap from "@/components/driver/DriverRideRequestsWithMap";
 import DriverFinancial from "@/components/driver/DriverFinancial";
 import DriverSettings from "@/components/driver/DriverSettings";
 import DriverRatings from "@/components/driver/DriverRatings";
@@ -247,24 +247,6 @@ const DriverDashboard = () => {
         </CardContent>
       </Card>
 
-      {/* Área do Mapa (Reservada) */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MapPin className="w-5 h-5" />
-            Mapa (Em Desenvolvimento)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-64 bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
-            <div className="text-center">
-              <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-              <p className="text-gray-500">Integração com Mapbox será implementada</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Abas Principais */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-5">
@@ -291,7 +273,7 @@ const DriverDashboard = () => {
         </TabsList>
 
         <TabsContent value="rides" className="mt-6">
-          <DriverRideRequests driverData={driverData} isOnline={isOnline} />
+          <DriverRideRequestsWithMap driverData={driverData} isOnline={isOnline} />
         </TabsContent>
 
         <TabsContent value="financial" className="mt-6">
