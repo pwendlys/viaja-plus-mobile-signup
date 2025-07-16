@@ -106,7 +106,10 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
     }
   };
 
-  const handleFileUpload = async (file: File, documentType: string) => {
+  const handleFileUpload = async (files: File[], documentType: string) => {
+    if (files.length === 0) return;
+    
+    const file = files[0];
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${driverData.id}_${documentType}_${Date.now()}.${fileExt}`;
@@ -380,43 +383,38 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label>CNH Frente</Label>
               <FileUpload
-                onFileSelect={(file) => handleFileUpload(file, 'cnh_front_photo')}
-                currentFile={driverData?.drivers?.[0]?.cnh_front_photo}
+                label="CNH Frente"
                 accept="image/*"
+                onFileChange={(files) => handleFileUpload(files, 'cnh_front_photo')}
               />
             </div>
             <div>
-              <Label>CNH Verso</Label>
               <FileUpload
-                onFileSelect={(file) => handleFileUpload(file, 'cnh_back_photo')}
-                currentFile={driverData?.drivers?.[0]?.cnh_back_photo}
+                label="CNH Verso"
                 accept="image/*"
+                onFileChange={(files) => handleFileUpload(files, 'cnh_back_photo')}
               />
             </div>
             <div>
-              <Label>Selfie com Documento</Label>
               <FileUpload
-                onFileSelect={(file) => handleFileUpload(file, 'selfie_with_document')}
-                currentFile={driverData?.drivers?.[0]?.selfie_with_document}
+                label="Selfie com Documento"
                 accept="image/*"
+                onFileChange={(files) => handleFileUpload(files, 'selfie_with_document')}
               />
             </div>
             <div>
-              <Label>Foto do Veículo</Label>
               <FileUpload
-                onFileSelect={(file) => handleFileUpload(file, 'vehicle_photo')}
-                currentFile={driverData?.drivers?.[0]?.vehicle_photo}
+                label="Foto do Veículo"
                 accept="image/*"
+                onFileChange={(files) => handleFileUpload(files, 'vehicle_photo')}
               />
             </div>
             <div className="md:col-span-2">
-              <Label>Documento do Veículo</Label>
               <FileUpload
-                onFileSelect={(file) => handleFileUpload(file, 'vehicle_document')}
-                currentFile={driverData?.drivers?.[0]?.vehicle_document}
+                label="Documento do Veículo"
                 accept="image/*,.pdf"
+                onFileChange={(files) => handleFileUpload(files, 'vehicle_document')}
               />
             </div>
           </div>
