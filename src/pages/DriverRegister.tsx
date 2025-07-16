@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -214,7 +213,7 @@ const DriverRegister = () => {
         description: "Verifique seu e-mail para confirmar a conta. Aguarde a aprovação da prefeitura.",
       });
 
-      navigate("/success", { state: { userType: "driver" } });
+      navigate("/registration-success", { state: { userType: "driver" } });
     } catch (error: any) {
       console.error('Error registering driver:', error);
       toast({
