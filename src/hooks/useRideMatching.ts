@@ -12,6 +12,7 @@ interface RideRequest {
   pickup_time: string;
   estimated_price: number;
   status: string;
+  scheduled_for?: string;
   patient?: {
     full_name: string;
     phone: string;
@@ -23,9 +24,11 @@ export const useRideMatching = (driverId?: string, isOnline: boolean = false) =>
   const [availableRides, setAvailableRides] = useState<RideRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch available rides
+  // Fetch available rides including scheduled ones
   const fetchAvailableRides = async () => {
     try {
+      const now = new Date().toISOString();
+      
       const { data: rides, error } = await supabase
         .from('rides')
         .select(`
@@ -34,6 +37,7 @@ export const useRideMatching = (driverId?: string, isOnline: boolean = false) =>
         `)
         .is('driver_id', null)
         .eq('status', 'pending')
+        .or(`scheduled_for.is.null,scheduled_for.gte.${now}`)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -44,6 +48,7 @@ export const useRideMatching = (driverId?: string, isOnline: boolean = false) =>
         patient: Array.isArray(ride.patient) ? ride.patient[0] : ride.patient
       }));
       
+      console.log('Available rides fetched:', transformedRides);
       setAvailableRides(transformedRides);
     } catch (error) {
       console.error('Error fetching rides:', error);
@@ -84,13 +89,13 @@ export const useRideMatching = (driverId?: string, isOnline: boolean = false) =>
           .insert({
             user_id: ride.patient_id,
             title: 'Corrida Aceita',
-            message: 'Um motorista aceitou sua corrida e está a caminho!',
+            message: `Um motorista aceitou sua corrida ${ride.scheduled_for ? 'agendada' : ''} e está a caminho!`,
           });
       }
 
       toast({
         title: "Corrida Aceita",
-        description: "Você aceitou a corrida com sucesso!",
+        description: `Você aceitou a corrida ${ride?.scheduled_for ? 'agendada' : ''} com sucesso!`,
       });
 
       fetchAvailableRides();
@@ -132,26 +137,36 @@ export const useRideMatching = (driverId?: string, isOnline: boolean = false) =>
     }
   };
 
-  // Real-time updates for new ride requests
+  // Real-time updates for new ride requests (both immediate and scheduled)
   useEffect(() => {
     if (!isOnline) return;
 
     fetchAvailableRides();
 
-    const channel = supabase
-      .channel('ride-requests')
+    // Subscribe to real-time ride updates
+    const ridesChannel = supabase
+      .channel('ride-requests-realtime')
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'rides'
       }, (payload) => {
         const newRide = payload.new as any;
+        console.log('New ride request received:', newRide);
+        
         if (newRide.status === 'pending' && !newRide.driver_id) {
+          const isScheduled = newRide.scheduled_for && new Date(newRide.scheduled_for) > new Date();
+          
           // Show notification for new ride request
           toast({
-            title: "Nova Corrida Disponível",
-            description: `Corrida de ${newRide.pickup_address} para ${newRide.destination_address}`,
+            title: isScheduled ? "Nova Corrida Agendada Disponível" : "Nova Corrida Disponível",
+            description: `${isScheduled ? 'Agendamento' : 'Corrida'} de ${newRide.pickup_address} para ${newRide.destination_address}`,
+            duration: 8000,
           });
+          
+          // Play notification sound (optional)
+          const audio = new Audio('/notification-sound.mp3');
+          audio.play().catch(e => console.log('Could not play notification sound'));
           
           fetchAvailableRides();
         }
@@ -160,14 +175,56 @@ export const useRideMatching = (driverId?: string, isOnline: boolean = false) =>
         event: 'UPDATE',
         schema: 'public',
         table: 'rides'
+      }, (payload) => {
+        console.log('Ride updated:', payload);
+        fetchAvailableRides();
+      })
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'rides'
       }, () => {
         fetchAvailableRides();
       })
       .subscribe();
 
+    // Also listen for profile status changes to update ride availability
+    const profileChannel = supabase
+      .channel('driver-status-updates')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'profiles',
+        filter: `id=eq.${driverId}`
+      }, (payload) => {
+        const updatedProfile = payload.new as any;
+        console.log('Driver profile updated:', updatedProfile);
+        
+        if (updatedProfile.status === 'approved') {
+          toast({
+            title: "Perfil Aprovado!",
+            description: "Agora você pode receber corridas em tempo real!",
+          });
+          fetchAvailableRides();
+        }
+      })
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(ridesChannel);
+      supabase.removeChannel(profileChannel);
     };
+  }, [isOnline, driverId]);
+
+  // Fetch rides periodically for scheduled rides that become available
+  useEffect(() => {
+    if (!isOnline) return;
+
+    const interval = setInterval(() => {
+      fetchAvailableRides();
+    }, 30000); // Check every 30 seconds for scheduled rides
+
+    return () => clearInterval(interval);
   }, [isOnline]);
 
   return {

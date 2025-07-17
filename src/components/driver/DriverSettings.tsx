@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
-import { User, Car, DollarSign } from "lucide-react";
+import { User, Car, DollarSign, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import FileUpload from "@/components/FileUpload";
@@ -19,6 +19,7 @@ interface DriverSettingsProps {
 const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [autoSaving, setAutoSaving] = useState(false);
   const [kmPricing, setKmPricing] = useState<any[]>([]);
   
   // Profile data
@@ -125,13 +126,17 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
     return pricing?.price_per_km || null;
   };
 
-  const updateProfile = async () => {
-    setLoading(true);
+  // Auto-save function with debounce
+  const autoSaveProfile = async () => {
+    setAutoSaving(true);
     try {
       // Update profile
       const { error: profileError } = await supabase
         .from('profiles')
-        .update(profileData)
+        .update({
+          ...profileData,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', driverData.id);
 
       if (profileError) throw profileError;
@@ -158,9 +163,52 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
         if (driverError) throw driverError;
       }
 
+      // Check if profile is now complete and approve automatically
+      const isProfileComplete = hasCompleteVehicleInfo();
+      if (isProfileComplete && driverData.status !== 'approved') {
+        const { error: statusError } = await supabase
+          .from('profiles')
+          .update({ 
+            status: 'approved',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', driverData.id);
+
+        if (statusError) throw statusError;
+
+        toast({
+          title: "Perfil Aprovado!",
+          description: "Seu perfil foi completado e aprovado automaticamente. Agora você pode receber corridas!",
+        });
+      }
+
+      console.log('Profile auto-saved successfully');
+    } catch (error) {
+      console.error('Error auto-saving profile:', error);
+    } finally {
+      setAutoSaving(false);
+    }
+  };
+
+  // Debounced auto-save
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (driverData?.id) {
+        autoSaveProfile();
+      }
+    }, 2000); // Auto-save after 2 seconds of no changes
+
+    return () => clearTimeout(timer);
+  }, [profileData, driverDetails]);
+
+  const updateProfile = async () => {
+    setLoading(true);
+    try {
+      await autoSaveProfile();
+      
       toast({
         title: "Perfil atualizado",
-        description: "Suas informações foram atualizadas com sucesso. Você agora pode receber corridas!",
+        description: "Suas informações foram salvas com sucesso!",
       });
 
       // Force refresh parent data
@@ -233,16 +281,28 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
 
   return (
     <div className="space-y-6">
+      {/* Auto-save indicator */}
+      {autoSaving && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-blue-800">
+              <Save className="w-4 h-4 animate-pulse" />
+              <p className="text-sm">Salvando automaticamente...</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Status do Perfil */}
       {hasCompleteVehicleInfo() && (
         <Card className="border-green-200 bg-green-50">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-green-800">
               <Car className="w-5 h-5" />
-              <p className="font-medium">Perfil Completo!</p>
+              <p className="font-medium">Perfil Completo e Aprovado!</p>
             </div>
             <p className="text-sm text-green-600 mt-1">
-              Seu veículo está cadastrado e você pode receber corridas.
+              Seu veículo está cadastrado e você pode receber corridas em tempo real.
             </p>
           </CardContent>
         </Card>
@@ -518,9 +578,10 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
         </CardContent>
       </Card>
 
-      {/* Botão Salvar */}
-      <Button onClick={updateProfile} disabled={loading} className="w-full">
-        {loading ? "Salvando..." : "Salvar Alterações"}
+      {/* Botão Salvar Manual */}
+      <Button onClick={updateProfile} disabled={loading || autoSaving} className="w-full">
+        <Save className="w-4 h-4 mr-2" />
+        {loading ? "Salvando..." : "Salvar Manualmente"}
       </Button>
     </div>
   );

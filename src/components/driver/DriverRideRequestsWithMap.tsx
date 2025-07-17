@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { WifiOff } from "lucide-react";
+import { WifiOff, Clock, Zap } from "lucide-react";
 import { useRideMatching } from "@/hooks/useRideMatching";
 import { useRealTimeLocation } from "@/hooks/useRealTimeLocation";
 import RideRequestCard from "@/components/RideRequestCard";
@@ -30,6 +30,24 @@ const DriverRideRequestsWithMap: React.FC<DriverRideRequestsWithMapProps> = ({
 
   useEffect(() => {
     fetchActiveRides();
+    
+    // Set up real-time subscription for active rides
+    const subscription = supabase
+      .channel('driver-active-rides')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'rides',
+        filter: `driver_id=eq.${driverData?.id}`
+      }, () => {
+        console.log('Active rides updated, refreshing...');
+        fetchActiveRides();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
   }, [driverData?.id]);
 
   useEffect(() => {
@@ -78,6 +96,10 @@ const DriverRideRequestsWithMap: React.FC<DriverRideRequestsWithMapProps> = ({
   const getDriverCarType = () => {
     return driverData?.drivers?.[0]?.has_accessibility ? 'accessibility' : 'common';
   };
+
+  // Separate immediate and scheduled rides
+  const immediateRides = availableRides.filter(ride => !ride.scheduled_for);
+  const scheduledRides = availableRides.filter(ride => ride.scheduled_for);
 
   // Prepare map markers
   const mapMarkers = [];
@@ -140,11 +162,22 @@ const DriverRideRequestsWithMap: React.FC<DriverRideRequestsWithMapProps> = ({
                         <Badge className="bg-blue-100 text-blue-800">
                           {ride.status === 'accepted' ? 'Aceita' : 'Em Andamento'}
                         </Badge>
+                        {ride.scheduled_for && (
+                          <Badge variant="outline" className="bg-purple-50 text-purple-700">
+                            <Clock className="w-3 h-3 mr-1" />
+                            Agendada
+                          </Badge>
+                        )}
                       </div>
                       
                       <div className="grid grid-cols-1 gap-2 mb-3">
                         <p className="text-sm">📍 {ride.pickup_address}</p>
                         <p className="text-sm">🏁 {ride.destination_address}</p>
+                        {ride.scheduled_for && (
+                          <p className="text-sm text-purple-600">
+                            ⏰ {new Date(ride.scheduled_for).toLocaleString('pt-BR')}
+                          </p>
+                        )}
                       </div>
 
                       <div className="text-sm text-gray-600">
@@ -159,22 +192,56 @@ const DriverRideRequestsWithMap: React.FC<DriverRideRequestsWithMapProps> = ({
         </div>
       )}
 
-      {/* Corridas Disponíveis */}
+      {/* Corridas Imediatas Disponíveis */}
       <div>
-        <h2 className="text-xl font-semibold mb-4">Corridas Disponíveis</h2>
+        <div className="flex items-center gap-2 mb-4">
+          <Zap className="w-5 h-5 text-yellow-500" />
+          <h2 className="text-xl font-semibold">Corridas Imediatas</h2>
+          <Badge variant="secondary">{immediateRides.length}</Badge>
+        </div>
+        
         {loading ? (
           <div className="flex items-center justify-center h-32">
             <div className="text-lg">Carregando corridas...</div>
           </div>
-        ) : availableRides.length === 0 ? (
+        ) : immediateRides.length === 0 ? (
           <Card>
             <CardContent className="p-6 text-center">
-              <p className="text-gray-500">Nenhuma corrida disponível no momento.</p>
+              <p className="text-gray-500">Nenhuma corrida imediata disponível no momento.</p>
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-4">
-            {availableRides.map((ride) => (
+            {immediateRides.map((ride) => (
+              <RideRequestCard
+                key={ride.id}
+                ride={ride}
+                onAccept={handleAcceptRide}
+                isOnline={isOnline}
+                driverType={getDriverCarType()}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Corridas Agendadas Disponíveis */}
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <Clock className="w-5 h-5 text-purple-500" />
+          <h2 className="text-xl font-semibold">Corridas Agendadas</h2>
+          <Badge variant="secondary">{scheduledRides.length}</Badge>
+        </div>
+        
+        {scheduledRides.length === 0 ? (
+          <Card>
+            <CardContent className="p-6 text-center">
+              <p className="text-gray-500">Nenhuma corrida agendada disponível no momento.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {scheduledRides.map((ride) => (
               <RideRequestCard
                 key={ride.id}
                 ride={ride}
