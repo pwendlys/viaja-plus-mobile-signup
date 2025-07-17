@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
-import { User, Car, DollarSign, Save } from "lucide-react";
+import { User, Car, DollarSign, Save, CheckCircle, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import FileUpload from "@/components/FileUpload";
@@ -19,7 +19,6 @@ interface DriverSettingsProps {
 const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [autoSaving, setAutoSaving] = useState(false);
   const [kmPricing, setKmPricing] = useState<any[]>([]);
   
   // Profile data
@@ -126,9 +125,30 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
     return pricing?.price_per_km || null;
   };
 
-  // Auto-save function with debounce
-  const autoSaveProfile = async () => {
-    setAutoSaving(true);
+  // Check if driver has complete vehicle information
+  const hasCompleteVehicleInfo = () => {
+    return driverDetails.cnh_number && 
+           driverDetails.vehicle_make && 
+           driverDetails.vehicle_model && 
+           driverDetails.vehicle_year && 
+           driverDetails.vehicle_plate && 
+           driverDetails.vehicle_color;
+  };
+
+  // Get missing fields for validation feedback
+  const getMissingFields = () => {
+    const missing = [];
+    if (!driverDetails.cnh_number) missing.push("Número da CNH");
+    if (!driverDetails.vehicle_make) missing.push("Marca do veículo");
+    if (!driverDetails.vehicle_model) missing.push("Modelo do veículo");
+    if (!driverDetails.vehicle_year) missing.push("Ano do veículo");
+    if (!driverDetails.vehicle_plate) missing.push("Placa do veículo");
+    if (!driverDetails.vehicle_color) missing.push("Cor do veículo");
+    return missing;
+  };
+
+  const updateProfile = async () => {
+    setLoading(true);
     try {
       // Update profile
       const { error: profileError } = await supabase
@@ -163,7 +183,7 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
         if (driverError) throw driverError;
       }
 
-      // Check if profile is now complete and approve automatically
+      // Check if profile is complete and approve automatically
       const isProfileComplete = hasCompleteVehicleInfo();
       if (isProfileComplete && driverData.status !== 'approved') {
         const { error: statusError } = await supabase
@@ -180,36 +200,12 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
           title: "Perfil Aprovado!",
           description: "Seu perfil foi completado e aprovado automaticamente. Agora você pode receber corridas!",
         });
+      } else {
+        toast({
+          title: "Perfil atualizado",
+          description: "Suas informações foram salvas com sucesso!",
+        });
       }
-
-      console.log('Profile auto-saved successfully');
-    } catch (error) {
-      console.error('Error auto-saving profile:', error);
-    } finally {
-      setAutoSaving(false);
-    }
-  };
-
-  // Debounced auto-save
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (driverData?.id) {
-        autoSaveProfile();
-      }
-    }, 2000); // Auto-save after 2 seconds of no changes
-
-    return () => clearTimeout(timer);
-  }, [profileData, driverDetails]);
-
-  const updateProfile = async () => {
-    setLoading(true);
-    try {
-      await autoSaveProfile();
-      
-      toast({
-        title: "Perfil atualizado",
-        description: "Suas informações foram salvas com sucesso!",
-      });
 
       // Force refresh parent data
       onUpdate();
@@ -269,40 +265,33 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
     }
   };
 
-  // Check if driver has complete vehicle information
-  const hasCompleteVehicleInfo = () => {
-    return driverDetails.cnh_number && 
-           driverDetails.vehicle_make && 
-           driverDetails.vehicle_model && 
-           driverDetails.vehicle_year && 
-           driverDetails.vehicle_plate && 
-           driverDetails.vehicle_color;
-  };
+  const missingFields = getMissingFields();
+  const isComplete = hasCompleteVehicleInfo();
 
   return (
     <div className="space-y-6">
-      {/* Auto-save indicator */}
-      {autoSaving && (
-        <Card className="border-blue-200 bg-blue-50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-blue-800">
-              <Save className="w-4 h-4 animate-pulse" />
-              <p className="text-sm">Salvando automaticamente...</p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Status do Perfil */}
-      {hasCompleteVehicleInfo() && (
+      {isComplete ? (
         <Card className="border-green-200 bg-green-50">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-green-800">
-              <Car className="w-5 h-5" />
+              <CheckCircle className="w-5 h-5" />
               <p className="font-medium">Perfil Completo e Aprovado!</p>
             </div>
             <p className="text-sm text-green-600 mt-1">
               Seu veículo está cadastrado e você pode receber corridas em tempo real.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-orange-800">
+              <AlertCircle className="w-5 h-5" />
+              <p className="font-medium">Complete seu perfil para receber corridas</p>
+            </div>
+            <p className="text-sm text-orange-600 mt-1">
+              Campos obrigatórios faltando: {missingFields.join(", ")}
             </p>
           </CardContent>
         </Card>
@@ -441,54 +430,60 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label htmlFor="cnh_number">Número da CNH</Label>
+            <Label htmlFor="cnh_number">Número da CNH *</Label>
             <Input
               id="cnh_number"
               value={driverDetails.cnh_number}
               onChange={(e) => setDriverDetails(prev => ({ ...prev, cnh_number: e.target.value }))}
+              className={!driverDetails.cnh_number ? "border-orange-300" : ""}
             />
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="vehicle_make">Marca</Label>
+              <Label htmlFor="vehicle_make">Marca *</Label>
               <Input
                 id="vehicle_make"
                 value={driverDetails.vehicle_make}
                 onChange={(e) => setDriverDetails(prev => ({ ...prev, vehicle_make: e.target.value }))}
+                className={!driverDetails.vehicle_make ? "border-orange-300" : ""}
               />
             </div>
             <div>
-              <Label htmlFor="vehicle_model">Modelo</Label>
+              <Label htmlFor="vehicle_model">Modelo *</Label>
               <Input
                 id="vehicle_model"
                 value={driverDetails.vehicle_model}
                 onChange={(e) => setDriverDetails(prev => ({ ...prev, vehicle_model: e.target.value }))}
+                className={!driverDetails.vehicle_model ? "border-orange-300" : ""}
               />
             </div>
             <div>
-              <Label htmlFor="vehicle_year">Ano</Label>
+              <Label htmlFor="vehicle_year">Ano *</Label>
               <Input
                 id="vehicle_year"
                 type="number"
                 value={driverDetails.vehicle_year}
                 onChange={(e) => setDriverDetails(prev => ({ ...prev, vehicle_year: parseInt(e.target.value) || 0 }))}
+                className={!driverDetails.vehicle_year ? "border-orange-300" : ""}
               />
             </div>
             <div>
-              <Label htmlFor="vehicle_plate">Placa</Label>
+              <Label htmlFor="vehicle_plate">Placa *</Label>
               <Input
                 id="vehicle_plate"
                 value={driverDetails.vehicle_plate}
                 onChange={(e) => setDriverDetails(prev => ({ ...prev, vehicle_plate: e.target.value }))}
+                className={!driverDetails.vehicle_plate ? "border-orange-300" : ""}
               />
             </div>
             <div className="md:col-span-2">
-              <Label htmlFor="vehicle_color">Cor</Label>
+              <Label htmlFor="vehicle_color">Cor *</Label>
               <Input
                 id="vehicle_color"
                 value={driverDetails.vehicle_color}
                 onChange={(e) => setDriverDetails(prev => ({ ...prev, vehicle_color: e.target.value }))}
+                className={!driverDetails.vehicle_color ? "border-orange-300" : ""}
               />
             </div>
           </div>
@@ -578,10 +573,10 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
         </CardContent>
       </Card>
 
-      {/* Botão Salvar Manual */}
-      <Button onClick={updateProfile} disabled={loading || autoSaving} className="w-full">
+      {/* Botão Salvar */}
+      <Button onClick={updateProfile} disabled={loading} className="w-full">
         <Save className="w-4 h-4 mr-2" />
-        {loading ? "Salvando..." : "Salvar Manualmente"}
+        {loading ? "Salvando..." : "Salvar Perfil"}
       </Button>
     </div>
   );
