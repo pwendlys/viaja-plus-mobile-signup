@@ -34,7 +34,14 @@ export const useRideCancellation = (rideId?: string) => {
         .maybeSingle();
 
       if (error) throw error;
-      setCancellationRequest(data);
+      
+      // Type assertion para garantir que o status seja do tipo correto
+      const typedData = data ? {
+        ...data,
+        status: data.status as 'pending' | 'approved' | 'rejected'
+      } : null;
+      
+      setCancellationRequest(typedData);
     } catch (error) {
       console.error('Erro ao buscar solicitação de cancelamento:', error);
     }
@@ -61,7 +68,13 @@ export const useRideCancellation = (rideId?: string) => {
 
       if (error) throw error;
 
-      setCancellationRequest(data);
+      // Type assertion para o retorno
+      const typedData = {
+        ...data,
+        status: data.status as 'pending' | 'approved' | 'rejected'
+      };
+
+      setCancellationRequest(typedData);
       toast({
         title: "Solicitação Enviada",
         description: "Sua solicitação de cancelamento foi enviada ao motorista.",

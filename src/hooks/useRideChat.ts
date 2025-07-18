@@ -29,7 +29,14 @@ export const useRideChat = (rideId?: string) => {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setMessages(data || []);
+      
+      // Type assertion para garantir que sender_type seja do tipo correto
+      const typedMessages = (data || []).map(message => ({
+        ...message,
+        sender_type: message.sender_type as 'patient' | 'driver'
+      }));
+      
+      setMessages(typedMessages);
     } catch (error) {
       console.error('Erro ao buscar mensagens:', error);
     }
@@ -82,7 +89,10 @@ export const useRideChat = (rideId?: string) => {
           table: 'ride_chat_messages',
           filter: `ride_id=eq.${rideId}`
         }, (payload) => {
-          const newMessage = payload.new as ChatMessage;
+          const newMessage = {
+            ...payload.new,
+            sender_type: payload.new.sender_type as 'patient' | 'driver'
+          } as ChatMessage;
           setMessages(prev => [...prev, newMessage]);
         })
         .subscribe();
