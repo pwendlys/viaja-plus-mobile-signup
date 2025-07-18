@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -79,6 +78,7 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
   // Update local state when driverData prop changes
   useEffect(() => {
     if (driverData) {
+      console.log('Updating driver data from props:', driverData);
       setProfileData({
         full_name: driverData.full_name || "",
         phone: driverData.phone || "",
@@ -127,12 +127,24 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
 
   // Check if driver has complete vehicle information
   const hasCompleteVehicleInfo = () => {
-    return driverDetails.cnh_number && 
+    const isComplete = driverDetails.cnh_number && 
            driverDetails.vehicle_make && 
            driverDetails.vehicle_model && 
            driverDetails.vehicle_year && 
            driverDetails.vehicle_plate && 
            driverDetails.vehicle_color;
+    
+    console.log('Vehicle info completeness check:', {
+      cnh_number: !!driverDetails.cnh_number,
+      vehicle_make: !!driverDetails.vehicle_make,
+      vehicle_model: !!driverDetails.vehicle_model,
+      vehicle_year: !!driverDetails.vehicle_year,
+      vehicle_plate: !!driverDetails.vehicle_plate,
+      vehicle_color: !!driverDetails.vehicle_color,
+      isComplete
+    });
+    
+    return isComplete;
   };
 
   // Get missing fields for validation feedback
@@ -147,9 +159,57 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
     return missing;
   };
 
+  const validateDriverDetails = () => {
+    const errors = [];
+    
+    // Check required fields
+    if (!driverDetails.cnh_number.trim()) errors.push("Número da CNH é obrigatório");
+    if (!driverDetails.vehicle_make.trim()) errors.push("Marca do veículo é obrigatória");
+    if (!driverDetails.vehicle_model.trim()) errors.push("Modelo do veículo é obrigatório");
+    if (!driverDetails.vehicle_year || driverDetails.vehicle_year === "" || Number(driverDetails.vehicle_year) < 1900) {
+      errors.push("Ano do veículo deve ser válido");
+    }
+    if (!driverDetails.vehicle_plate.trim()) errors.push("Placa do veículo é obrigatória");
+    if (!driverDetails.vehicle_color.trim()) errors.push("Cor do veículo é obrigatória");
+    
+    return errors;
+  };
+
   const updateProfile = async () => {
+    console.log('Starting profile update process...');
     setLoading(true);
+    
     try {
+      // Check authentication first
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        console.error('Authentication error:', authError);
+        toast({
+          title: "Erro de Autenticação",
+          description: "Você precisa estar logado para salvar o perfil.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log('User authenticated:', user.id);
+      console.log('Driver data ID:', driverData?.id);
+
+      // Validate driver details
+      const validationErrors = validateDriverDetails();
+      if (validationErrors.length > 0) {
+        console.log('Validation errors:', validationErrors);
+        toast({
+          title: "Dados Incompletos",
+          description: validationErrors.join(", "),
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log('Validation passed, updating profile...');
+      console.log('Profile data to update:', profileData);
+
       // Update profile
       const { error: profileError } = await supabase
         .from('profiles')
@@ -159,33 +219,70 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
         })
         .eq('id', driverData.id);
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error('Profile update error:', profileError);
+        throw profileError;
+      }
 
-      // Update or insert driver data
-      const { data: existingDriver } = await supabase
+      console.log('Profile updated successfully, now updating driver data...');
+
+      // Prepare driver data for upsert
+      const driverDataToSave = {
+        ...driverDetails,
+        id: driverData.id,
+        vehicle_year: parseInt(driverDetails.vehicle_year.toString()) || null
+      };
+
+      console.log('Driver data to save:', driverDataToSave);
+
+      // Check if driver record exists
+      const { data: existingDriver, error: checkError } = await supabase
         .from('drivers')
         .select('id')
         .eq('id', driverData.id)
-        .single();
+        .maybeSingle();
+
+      if (checkError) {
+        console.error('Error checking existing driver:', checkError);
+        throw checkError;
+      }
+
+      console.log('Existing driver check result:', existingDriver);
 
       if (existingDriver) {
-        const { error: driverError } = await supabase
+        // Update existing driver
+        console.log('Updating existing driver record...');
+        const { error: driverUpdateError } = await supabase
           .from('drivers')
-          .update(driverDetails)
+          .update(driverDataToSave)
           .eq('id', driverData.id);
 
-        if (driverError) throw driverError;
+        if (driverUpdateError) {
+          console.error('Driver update error:', driverUpdateError);
+          throw driverUpdateError;
+        }
+        console.log('Driver updated successfully');
       } else {
-        const { error: driverError } = await supabase
+        // Insert new driver
+        console.log('Inserting new driver record...');
+        const { error: driverInsertError } = await supabase
           .from('drivers')
-          .insert({ ...driverDetails, id: driverData.id });
+          .insert(driverDataToSave);
 
-        if (driverError) throw driverError;
+        if (driverInsertError) {
+          console.error('Driver insert error:', driverInsertError);
+          throw driverInsertError;
+        }
+        console.log('Driver inserted successfully');
       }
 
       // Check if profile is complete and approve automatically
       const isProfileComplete = hasCompleteVehicleInfo();
+      console.log('Profile completeness check:', isProfileComplete);
+      console.log('Current driver status:', driverData.status);
+
       if (isProfileComplete && driverData.status !== 'approved') {
+        console.log('Profile is complete, approving driver...');
         const { error: statusError } = await supabase
           .from('profiles')
           .update({ 
@@ -194,8 +291,12 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
           })
           .eq('id', driverData.id);
 
-        if (statusError) throw statusError;
+        if (statusError) {
+          console.error('Status update error:', statusError);
+          throw statusError;
+        }
 
+        console.log('Driver approved successfully');
         toast({
           title: "Perfil Aprovado!",
           description: "Seu perfil foi completado e aprovado automaticamente. Agora você pode receber corridas!",
@@ -207,13 +308,14 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
         });
       }
 
+      console.log('All updates completed, refreshing data...');
       // Force refresh parent data
       onUpdate();
     } catch (error) {
       console.error('Error updating profile:', error);
       toast({
         title: "Erro",
-        description: "Não foi possível atualizar o perfil.",
+        description: `Não foi possível atualizar o perfil: ${error.message || 'Erro desconhecido'}`,
         variant: "destructive",
       });
     } finally {
@@ -226,6 +328,17 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
     
     const file = files[0];
     try {
+      // Check authentication first
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        toast({
+          title: "Erro de Autenticação",
+          description: "Você precisa estar logado para enviar documentos.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const fileExt = file.name.split('.').pop();
       const fileName = `${driverData.id}_${documentType}_${Date.now()}.${fileExt}`;
       
@@ -463,8 +576,10 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
               <Input
                 id="vehicle_year"
                 type="number"
+                min="1900"
+                max="2030"
                 value={driverDetails.vehicle_year}
-                onChange={(e) => setDriverDetails(prev => ({ ...prev, vehicle_year: parseInt(e.target.value) || 0 }))}
+                onChange={(e) => setDriverDetails(prev => ({ ...prev, vehicle_year: e.target.value }))}
                 className={!driverDetails.vehicle_year ? "border-orange-300" : ""}
               />
             </div>
