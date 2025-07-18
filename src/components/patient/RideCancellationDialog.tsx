@@ -1,0 +1,215 @@
+
+import React, { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { AlertTriangle, MessageCircle, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { useRideCancellation } from '@/hooks/useRideCancellation';
+import RideChatDialog from './RideChatDialog';
+
+interface RideCancellationDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  ride: {
+    id: string;
+    status: string;
+    pickup_address: string;
+    destination_address: string;
+    driver?: {
+      full_name: string;
+    };
+  };
+  onRideCancelled: () => void;
+}
+
+const RideCancellationDialog: React.FC<RideCancellationDialogProps> = ({
+  isOpen,
+  onClose,
+  ride,
+  onRideCancelled
+}) => {
+  const [reason, setReason] = useState('');
+  const [showChat, setShowChat] = useState(false);
+  const { cancellationRequest, loading, requestCancellation } = useRideCancellation(ride.id);
+
+  const handleRequestCancellation = async () => {
+    if (!reason.trim()) return;
+
+    const success = await requestCancellation(reason);
+    if (success) {
+      setReason('');
+      if (ride.status === 'accepted' || ride.status === 'in_progress') {
+        // Se a corrida foi aceita, abrir o chat
+        setShowChat(true);
+      } else {
+        // Se ainda está pendente, cancelar diretamente
+        onRideCancelled();
+        onClose();
+      }
+    }
+  };
+
+  const handleChatClose = () => {
+    setShowChat(false);
+    if (cancellationRequest?.status === 'approved') {
+      onRideCancelled();
+      onClose();
+    }
+  };
+
+  const canCancelDirectly = ride.status === 'pending' && !ride.driver;
+  const needsDriverApproval = (ride.status === 'accepted' || ride.status === 'in_progress') && ride.driver;
+
+  return (
+    <>
+      <Dialog open={isOpen && !showChat} onOpenChange={onClose}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-orange-500" />
+              Cancelar Corrida
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <p className="text-sm font-medium">Corrida:</p>
+              <p className="text-sm text-gray-600">{ride.pickup_address}</p>
+              <p className="text-sm text-gray-600">→ {ride.destination_address}</p>
+              {ride.driver && (
+                <p className="text-sm text-blue-600 mt-1">
+                  Motorista: {ride.driver.full_name}
+                </p>
+              )}
+            </div>
+
+            {cancellationRequest ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">Status da Solicitação:</span>
+                  <Badge 
+                    className={
+                      cancellationRequest.status === 'approved' 
+                        ? 'bg-green-100 text-green-800'
+                        : cancellationRequest.status === 'rejected'
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-yellow-100 text-yellow-800'
+                    }
+                  >
+                    {cancellationRequest.status === 'approved' && <CheckCircle className="w-3 h-3 mr-1" />}
+                    {cancellationRequest.status === 'rejected' && <XCircle className="w-3 h-3 mr-1" />}
+                    {cancellationRequest.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
+                    {cancellationRequest.status === 'approved' ? 'Aprovada' :
+                     cancellationRequest.status === 'rejected' ? 'Rejeitada' : 'Pendente'}
+                  </Badge>
+                </div>
+
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-sm font-medium mb-1">Seu motivo:</p>
+                  <p className="text-sm text-gray-600">{cancellationRequest.reason}</p>
+                </div>
+
+                {cancellationRequest.response_reason && (
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <p className="text-sm font-medium mb-1">Resposta do motorista:</p>
+                    <p className="text-sm text-gray-600">{cancellationRequest.response_reason}</p>
+                  </div>
+                )}
+
+                {cancellationRequest.status === 'pending' && needsDriverApproval && (
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => setShowChat(true)}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      <MessageCircle className="w-4 h-4 mr-2" />
+                      Conversar
+                    </Button>
+                  </div>
+                )}
+
+                {cancellationRequest.status === 'approved' && (
+                  <div className="p-3 bg-green-50 rounded-lg">
+                    <p className="text-sm text-green-700">
+                      ✓ Cancelamento aprovado! A corrida foi cancelada.
+                    </p>
+                  </div>
+                )}
+
+                {cancellationRequest.status === 'rejected' && (
+                  <div className="p-3 bg-red-50 rounded-lg">
+                    <p className="text-sm text-red-700">
+                      ✗ Cancelamento rejeitado. A corrida continua ativa.
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Motivo do cancelamento:
+                  </label>
+                  <Textarea
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Explique o motivo do cancelamento..."
+                    rows={3}
+                  />
+                </div>
+
+                {canCancelDirectly && (
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <p className="text-sm text-blue-700">
+                      Como a corrida ainda não foi aceita, ela será cancelada imediatamente.
+                    </p>
+                  </div>
+                )}
+
+                {needsDriverApproval && (
+                  <div className="p-3 bg-yellow-50 rounded-lg">
+                    <p className="text-sm text-yellow-700">
+                      Como a corrida já foi aceita, o motorista precisa aprovar o cancelamento. 
+                      Você poderá conversar com ele através do chat.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={onClose}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    Voltar
+                  </Button>
+                  <Button
+                    onClick={handleRequestCancellation}
+                    disabled={!reason.trim() || loading}
+                    className="flex-1"
+                  >
+                    {loading ? 'Enviando...' : 'Confirmar Cancelamento'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {showChat && (
+        <RideChatDialog
+          isOpen={showChat}
+          onClose={handleChatClose}
+          rideId={ride.id}
+          userType="patient"
+          driverName={ride.driver?.full_name}
+        />
+      )}
+    </>
+  );
+};
+
+export default RideCancellationDialog;

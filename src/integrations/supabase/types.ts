@@ -572,6 +572,85 @@ export type Database = {
         }
         Relationships: []
       }
+      ride_cancellation_requests: {
+        Row: {
+          id: string
+          reason: string
+          requested_at: string
+          requested_by: string
+          responded_at: string | null
+          responded_by: string | null
+          response_reason: string | null
+          ride_id: string
+          status: string
+        }
+        Insert: {
+          id?: string
+          reason: string
+          requested_at?: string
+          requested_by: string
+          responded_at?: string | null
+          responded_by?: string | null
+          response_reason?: string | null
+          ride_id: string
+          status?: string
+        }
+        Update: {
+          id?: string
+          reason?: string
+          requested_at?: string
+          requested_by?: string
+          responded_at?: string | null
+          responded_by?: string | null
+          response_reason?: string | null
+          ride_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ride_cancellation_requests_ride_id_fkey"
+            columns: ["ride_id"]
+            isOneToOne: false
+            referencedRelation: "rides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ride_chat_messages: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          ride_id: string
+          sender_id: string
+          sender_type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          ride_id: string
+          sender_id: string
+          sender_type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          ride_id?: string
+          sender_id?: string
+          sender_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ride_chat_messages_ride_id_fkey"
+            columns: ["ride_id"]
+            isOneToOne: false
+            referencedRelation: "rides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ride_locations: {
         Row: {
           created_at: string

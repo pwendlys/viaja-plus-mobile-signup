@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Navigation, Calendar, Star, Settings, Heart, Phone } from "lucide-react";
+import { MapPin, Navigation, Calendar, Star, Settings, Heart, Phone, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import PatientFavorites from "@/components/patient/PatientFavorites";
@@ -12,6 +12,7 @@ import PatientSettings from "@/components/patient/PatientSettings";
 import RideRequestWithMap from "@/components/patient/RideRequestWithMap";
 import RideHistory from "@/components/patient/RideHistory";
 import EmergencyContacts from "@/components/patient/EmergencyContacts";
+import RideCancellationDialog from "@/components/patient/RideCancellationDialog";
 
 const PatientDashboard = () => {
   const { toast } = useToast();
@@ -19,11 +20,28 @@ const PatientDashboard = () => {
   const [patientProfile, setPatientProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeRides, setActiveRides] = useState<any[]>([]);
+  const [selectedRideForCancellation, setSelectedRideForCancellation] = useState<any>(null);
 
   useEffect(() => {
     fetchPatientData();
     fetchActiveRides();
     getCurrentLocation();
+
+    // Escutar atualizações em tempo real das corridas
+    const subscription = supabase
+      .channel('patient-rides-updates')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'rides'
+      }, () => {
+        fetchActiveRides();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
   }, []);
 
   const fetchPatientData = async () => {
@@ -122,6 +140,18 @@ const PatientDashboard = () => {
     }
   };
 
+  const handleCancelRide = (ride: any) => {
+    setSelectedRideForCancellation(ride);
+  };
+
+  const handleRideCancelled = () => {
+    fetchActiveRides();
+    toast({
+      title: "Corrida Cancelada",
+      description: "Sua corrida foi cancelada com sucesso.",
+    });
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -175,14 +205,30 @@ const PatientDashboard = () => {
             <div className="space-y-3">
               {activeRides.map((ride) => (
                 <div key={ride.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div>
+                  <div className="flex-1">
                     <p className="font-medium">{ride.pickup_address}</p>
                     <p className="text-sm text-gray-600">→ {ride.destination_address}</p>
                     {ride.driver && (
                       <p className="text-sm text-blue-600">Motorista: {ride.driver.full_name}</p>
                     )}
+                    {ride.scheduled_for && (
+                      <p className="text-sm text-purple-600">
+                        Agendada para: {new Date(ride.scheduled_for).toLocaleString('pt-BR')}
+                      </p>
+                    )}
                   </div>
-                  {getStatusBadge(ride.status)}
+                  <div className="flex items-center gap-2">
+                    {getStatusBadge(ride.status)}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleCancelRide(ride)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      Cancelar
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -226,6 +272,16 @@ const PatientDashboard = () => {
           />
         </TabsContent>
       </Tabs>
+
+      {/* Dialog de Cancelamento */}
+      {selectedRideForCancellation && (
+        <RideCancellationDialog
+          isOpen={!!selectedRideForCancellation}
+          onClose={() => setSelectedRideForCancellation(null)}
+          ride={selectedRideForCancellation}
+          onRideCancelled={handleRideCancelled}
+        />
+      )}
     </div>
   );
 };
