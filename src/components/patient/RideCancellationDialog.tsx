@@ -18,9 +18,10 @@ interface RideCancellationDialogProps {
     status: string;
     pickup_address: string;
     destination_address: string;
+    driver_id?: string | null;
     driver?: {
       full_name: string;
-    };
+    } | null;
   };
   onRideCancelled: () => void;
 }
@@ -37,21 +38,48 @@ const RideCancellationDialog: React.FC<RideCancellationDialogProps> = ({
   const [loading, setLoading] = useState(false);
   const { cancellationRequest, requestCancellation } = useRideCancellation(ride.id);
 
+  // Debug: verificar os dados da corrida
+  console.log('Ride data:', {
+    id: ride.id,
+    status: ride.status,
+    driver_id: ride.driver_id,
+    driver: ride.driver,
+    hasDriver: !!ride.driver_id || !!ride.driver
+  });
+
   const handleRequestCancellation = async () => {
     if (!reason.trim()) return;
 
     setLoading(true);
 
     try {
-      // Se a corrida está pendente e não tem motorista, cancela diretamente
-      if (ride.status === 'pending' && !ride.driver) {
+      // Verificação mais robusta: corrida pendente E sem motorista (driver_id null/undefined OU driver null/undefined)
+      const hasNoDriver = !ride.driver_id && (!ride.driver || ride.driver === null);
+      const isPending = ride.status === 'pending';
+      
+      console.log('Cancellation check:', {
+        isPending,
+        hasNoDriver,
+        driver_id: ride.driver_id,
+        driver: ride.driver,
+        shouldCancelDirectly: isPending && hasNoDriver
+      });
+
+      if (isPending && hasNoDriver) {
+        console.log('Canceling ride directly...');
+        
         const { error } = await supabase
           .from('rides')
           .update({ status: 'cancelled' })
           .eq('id', ride.id);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Error canceling ride:', error);
+          throw error;
+        }
 
+        console.log('Ride canceled successfully');
+        
         toast({
           title: "Corrida Cancelada",
           description: "Sua corrida foi cancelada com sucesso.",
@@ -63,6 +91,7 @@ const RideCancellationDialog: React.FC<RideCancellationDialogProps> = ({
       }
 
       // Se tem motorista, usar o sistema de solicitação
+      console.log('Using cancellation request system...');
       const success = await requestCancellation(reason);
       if (success) {
         setReason('');
@@ -90,8 +119,9 @@ const RideCancellationDialog: React.FC<RideCancellationDialogProps> = ({
     }
   };
 
-  const canCancelDirectly = ride.status === 'pending' && !ride.driver;
-  const needsDriverApproval = (ride.status === 'accepted' || ride.status === 'in_progress') && ride.driver;
+  // Verificação mais robusta para cancelamento direto
+  const canCancelDirectly = ride.status === 'pending' && (!ride.driver_id && (!ride.driver || ride.driver === null));
+  const needsDriverApproval = (ride.status === 'accepted' || ride.status === 'in_progress') && (ride.driver_id || ride.driver);
 
   return (
     <>
