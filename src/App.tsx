@@ -19,6 +19,7 @@ import PatientManagement from "./pages/admin/PatientManagement";
 import DriverManagement from "./pages/admin/DriverManagement";
 import RideManagement from "./pages/admin/RideManagement";
 import PricingManagement from "./pages/admin/PricingManagement";
+import PaymentHistory from "./pages/admin/PaymentHistory";
 import Settings from "./pages/admin/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -50,6 +51,7 @@ function App() {
               <Route path="drivers" element={<DriverManagement />} />
               <Route path="rides" element={<RideManagement />} />
               <Route path="pricing" element={<PricingManagement />} />
+              <Route path="payments" element={<PaymentHistory />} />
               <Route path="settings" element={<Settings />} />
             </Route>
             

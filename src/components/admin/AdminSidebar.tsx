@@ -8,6 +8,7 @@ import {
   MapPin, 
   Settings,
   DollarSign,
+  CreditCard,
   X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,11 @@ const AdminSidebar = ({ isMobile = false, isOpen = false, onClose }: AdminSideba
       name: "Preços por KM",
       href: "/admin/pricing",
       icon: DollarSign,
+    },
+    {
+      name: "Histórico de Pagamentos",
+      href: "/admin/payments",
+      icon: CreditCard,
     },
     {
       name: "Configurações",

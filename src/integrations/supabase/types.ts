@@ -772,6 +772,9 @@ export type Database = {
           created_at: string
           driver_id: string
           id: string
+          payment_completed_at: string | null
+          payment_due_date: string | null
+          payment_method: string | null
           processed_at: string | null
           requested_at: string
           status: string
@@ -782,6 +785,9 @@ export type Database = {
           created_at?: string
           driver_id: string
           id?: string
+          payment_completed_at?: string | null
+          payment_due_date?: string | null
+          payment_method?: string | null
           processed_at?: string | null
           requested_at?: string
           status?: string
@@ -792,6 +798,9 @@ export type Database = {
           created_at?: string
           driver_id?: string
           id?: string
+          payment_completed_at?: string | null
+          payment_due_date?: string | null
+          payment_method?: string | null
           processed_at?: string | null
           requested_at?: string
           status?: string
