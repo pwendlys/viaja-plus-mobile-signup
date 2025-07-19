@@ -7,6 +7,7 @@ import { useRideMatching } from "@/hooks/useRideMatching";
 import { useRealTimeLocation } from "@/hooks/useRealTimeLocation";
 import RideRequestCard from "@/components/RideRequestCard";
 import MapboxMap from "@/components/MapboxMap";
+import ActiveRideManager from "@/components/driver/ActiveRideManager";
 import { supabase } from "@/integrations/supabase/client";
 
 interface DriverRideRequestsWithMapProps {
@@ -20,6 +21,7 @@ const DriverRideRequestsWithMap: React.FC<DriverRideRequestsWithMapProps> = ({
 }) => {
   const [activeRides, setActiveRides] = useState<any[]>([]);
   const [currentRideId, setCurrentRideId] = useState<string | null>(null);
+  const [activeRide, setActiveRide] = useState<any | null>(null);
   
   const { availableRides, loading, acceptRide } = useRideMatching(driverData?.id, isOnline);
   const { currentLocation, startTracking, stopTracking } = useRealTimeLocation({
@@ -76,9 +78,13 @@ const DriverRideRequestsWithMap: React.FC<DriverRideRequestsWithMapProps> = ({
       setActiveRides(rides || []);
       
       // Set current ride for tracking
-      const inProgressRide = rides?.find(r => r.status === 'in_progress');
-      if (inProgressRide) {
-        setCurrentRideId(inProgressRide.id);
+      const currentRide = rides?.find(r => r.status === 'accepted' || r.status === 'in_progress');
+      if (currentRide) {
+        setCurrentRideId(currentRide.id);
+        setActiveRide(currentRide);
+      } else {
+        setCurrentRideId(null);
+        setActiveRide(null);
       }
     } catch (error) {
       console.error('Error fetching active rides:', error);
@@ -91,6 +97,12 @@ const DriverRideRequestsWithMap: React.FC<DriverRideRequestsWithMapProps> = ({
       setCurrentRideId(rideId);
       fetchActiveRides();
     }
+  };
+
+  const handleRideCompleted = () => {
+    setCurrentRideId(null);
+    setActiveRide(null);
+    fetchActiveRides();
   };
 
   const getDriverCarType = () => {
@@ -109,6 +121,17 @@ const DriverRideRequestsWithMap: React.FC<DriverRideRequestsWithMapProps> = ({
       coordinates: [currentLocation.lng, currentLocation.lat],
       type: 'driver' as const,
     });
+  }
+
+  // Se há uma corrida ativa, mostrar o componente de gerenciamento
+  if (activeRide) {
+    return (
+      <ActiveRideManager
+        ride={activeRide}
+        driverLocation={currentLocation}
+        onRideCompleted={handleRideCompleted}
+      />
+    );
   }
 
   return (
@@ -145,51 +168,6 @@ const DriverRideRequestsWithMap: React.FC<DriverRideRequestsWithMapProps> = ({
             </p>
           </CardContent>
         </Card>
-      )}
-
-      {/* Corridas Ativas */}
-      {activeRides.length > 0 && (
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Suas Corridas Ativas</h2>
-          <div className="space-y-4">
-            {activeRides.map((ride) => (
-              <Card key={ride.id} className="border-blue-200 bg-blue-50">
-                <CardContent className="p-4">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="font-medium">{ride.patient?.full_name}</span>
-                        <Badge className="bg-blue-100 text-blue-800">
-                          {ride.status === 'accepted' ? 'Aceita' : 'Em Andamento'}
-                        </Badge>
-                        {ride.scheduled_for && (
-                          <Badge variant="outline" className="bg-purple-50 text-purple-700">
-                            <Clock className="w-3 h-3 mr-1" />
-                            Agendada
-                          </Badge>
-                        )}
-                      </div>
-                      
-                      <div className="grid grid-cols-1 gap-2 mb-3">
-                        <p className="text-sm">📍 {ride.pickup_address}</p>
-                        <p className="text-sm">🏁 {ride.destination_address}</p>
-                        {ride.scheduled_for && (
-                          <p className="text-sm text-purple-600">
-                            ⏰ {new Date(ride.scheduled_for).toLocaleString('pt-BR')}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="text-sm text-gray-600">
-                        💰 R$ {ride.estimated_price || 0}
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
       )}
 
       {/* Corridas Imediatas Disponíveis */}

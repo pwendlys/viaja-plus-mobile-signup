@@ -95,7 +95,7 @@ export const useRideMatching = (driverId?: string, isOnline: boolean = false) =>
 
       toast({
         title: "Corrida Aceita",
-        description: `Você aceitou a corrida ${ride?.scheduled_for ? 'agendada' : ''} com sucesso!`,
+        description: `Você aceitou a corrida ${ride?.scheduled_for ? 'agendada' : ''} com sucesso! Dirija-se ao local de coleta.`,
       });
 
       fetchAvailableRides();
