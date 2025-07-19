@@ -3,10 +3,11 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Navigation, CheckCircle, Phone, MessageCircle } from 'lucide-react';
+import { MapPin, Navigation, CheckCircle, Phone, MessageCircle, Map } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import MapboxMap from '@/components/MapboxMap';
+import FullScreenNavigationMap from '@/components/driver/FullScreenNavigationMap';
 import { useRealTimeLocation } from '@/hooks/useRealTimeLocation';
 
 interface ActiveRideManagerProps {
@@ -26,6 +27,7 @@ const ActiveRideManager: React.FC<ActiveRideManagerProps> = ({
   const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
   const [isNearPickup, setIsNearPickup] = useState(false);
   const [isNearDestination, setIsNearDestination] = useState(false);
+  const [showFullScreenMap, setShowFullScreenMap] = useState(false);
 
   const { currentLocation, startTracking, stopTracking } = useRealTimeLocation({
     userId: ride.driver_id,
@@ -94,7 +96,7 @@ const ActiveRideManager: React.FC<ActiveRideManagerProps> = ({
         pickupCoords[1],
         pickupCoords[0]
       );
-      setIsNearPickup(distance < 0.1); // 100 metros
+      setIsNearPickup(distance < 0.5); // 500 metros
     }
 
     if (currentStatus === 'in_progress' && destinationCoords) {
@@ -104,7 +106,7 @@ const ActiveRideManager: React.FC<ActiveRideManagerProps> = ({
         destinationCoords[1],
         destinationCoords[0]
       );
-      setIsNearDestination(distance < 0.1); // 100 metros
+      setIsNearDestination(distance < 0.5); // 500 metros
     }
   };
 
@@ -133,6 +135,7 @@ const ActiveRideManager: React.FC<ActiveRideManagerProps> = ({
       if (error) throw error;
 
       setCurrentStatus('in_progress');
+      setShowFullScreenMap(false);
       
       // Notificar paciente
       await supabase
@@ -170,6 +173,8 @@ const ActiveRideManager: React.FC<ActiveRideManagerProps> = ({
 
       if (error) throw error;
 
+      setShowFullScreenMap(false);
+
       // Notificar paciente
       await supabase
         .from('notifications')
@@ -206,171 +211,152 @@ const ActiveRideManager: React.FC<ActiveRideManagerProps> = ({
     }
   };
 
-  const getMapMarkers = () => {
-    const markers = [];
-    
-    if (driverLocation) {
-      markers.push({
-        id: 'driver',
-        coordinates: [driverLocation.lng, driverLocation.lat] as [number, number],
-        type: 'driver' as const,
-      });
-    }
+  const openNavigationMap = () => {
+    setShowFullScreenMap(true);
+  };
 
-    if (currentStatus === 'accepted' && pickupCoords) {
-      markers.push({
-        id: 'pickup',
-        coordinates: pickupCoords,
+  const getCurrentDestination = () => {
+    if (currentStatus === 'accepted') {
+      return {
+        coords: pickupCoords,
         type: 'pickup' as const,
-      });
-    }
-
-    if (currentStatus === 'in_progress' && destinationCoords) {
-      markers.push({
-        id: 'destination',
-        coordinates: destinationCoords,
+        isNear: isNearPickup,
+        action: startRide
+      };
+    } else {
+      return {
+        coords: destinationCoords,
         type: 'destination' as const,
-      });
-    }
-
-    return markers;
-  };
-
-  const getRouteCoords = () => {
-    if (currentStatus === 'accepted' && driverLocation && pickupCoords) {
-      return {
-        pickup: [driverLocation.lng, driverLocation.lat] as [number, number],
-        destination: pickupCoords
+        isNear: isNearDestination,
+        action: completeRide
       };
     }
-    
-    if (currentStatus === 'in_progress' && driverLocation && destinationCoords) {
-      return {
-        pickup: [driverLocation.lng, driverLocation.lat] as [number, number],
-        destination: destinationCoords
-      };
-    }
-    
-    return null;
   };
 
-  const routeCoords = getRouteCoords();
+  const destination = getCurrentDestination();
 
   return (
-    <div className="space-y-6">
-      {/* Informações da Corrida Ativa */}
-      <Card className="border-blue-200 bg-blue-50">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>Corrida Ativa</span>
-            {getStatusBadge()}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Dados do Paciente */}
-          <div className="flex items-center justify-between p-3 bg-white rounded-lg">
-            <div>
-              <p className="font-medium">{ride.patient?.full_name}</p>
-              <p className="text-sm text-gray-600">{ride.patient?.phone}</p>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm">
-                <Phone className="w-4 h-4" />
-              </Button>
-              <Button variant="outline" size="sm">
-                <MessageCircle className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Endereços */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-green-600" />
+    <>
+      <div className="space-y-6">
+        {/* Informações da Corrida Ativa */}
+        <Card className="border-blue-200 bg-blue-50">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>Corrida Ativa</span>
+              {getStatusBadge()}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Dados do Paciente */}
+            <div className="flex items-center justify-between p-3 bg-white rounded-lg">
               <div>
-                <p className="text-sm font-medium">Origem</p>
-                <p className="text-sm text-gray-600">{ride.pickup_address}</p>
+                <p className="font-medium">{ride.patient?.full_name}</p>
+                <p className="text-sm text-gray-600">{ride.patient?.phone}</p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm">
+                  <Phone className="w-4 h-4" />
+                </Button>
+                <Button variant="outline" size="sm">
+                  <MessageCircle className="w-4 h-4" />
+                </Button>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Navigation className="w-5 h-5 text-red-600" />
-              <div>
-                <p className="text-sm font-medium">Destino</p>
-                <p className="text-sm text-gray-600">{ride.destination_address}</p>
+
+            {/* Endereços */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-green-600" />
+                <div>
+                  <p className="text-sm font-medium">Origem</p>
+                  <p className="text-sm text-gray-600">{ride.pickup_address}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Navigation className="w-5 h-5 text-red-600" />
+                <div>
+                  <p className="text-sm font-medium">Destino</p>
+                  <p className="text-sm text-gray-600">{ride.destination_address}</p>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Valor */}
-          <div className="p-3 bg-green-50 rounded-lg">
-            <p className="text-lg font-semibold text-green-800">
-              💰 R$ {ride.estimated_price}
-            </p>
-          </div>
-
-          {/* Botões de Ação */}
-          <div className="flex gap-2">
-            {currentStatus === 'accepted' && (
-              <Button 
-                onClick={startRide} 
-                disabled={!isNearPickup}
-                className="flex-1 bg-green-600 hover:bg-green-700"
-              >
-                <CheckCircle className="w-4 h-4 mr-2" />
-                {isNearPickup ? 'Iniciar Corrida' : 'Chegue ao local para iniciar'}
-              </Button>
-            )}
-            
-            {currentStatus === 'in_progress' && (
-              <Button 
-                onClick={completeRide} 
-                disabled={!isNearDestination}
-                className="flex-1 bg-blue-600 hover:bg-blue-700"
-              >
-                <CheckCircle className="w-4 h-4 mr-2" />
-                {isNearDestination ? 'Finalizar Corrida' : 'Chegue ao destino para finalizar'}
-              </Button>
-            )}
-          </div>
-
-          {/* Avisos de Proximidade */}
-          {currentStatus === 'accepted' && isNearPickup && (
-            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-sm text-yellow-800">
-                🎯 Você está próximo ao local de coleta! Você pode iniciar a corrida.
+            {/* Valor */}
+            <div className="p-3 bg-green-50 rounded-lg">
+              <p className="text-lg font-semibold text-green-800">
+                💰 R$ {ride.estimated_price}
               </p>
             </div>
-          )}
 
-          {currentStatus === 'in_progress' && isNearDestination && (
-            <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-sm text-green-800">
-                🎯 Você chegou ao destino! Você pode finalizar a corrida.
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            {/* Botão de Navegação */}
+            <Button 
+              onClick={openNavigationMap}
+              className="w-full bg-blue-600 hover:bg-blue-700"
+            >
+              <Map className="w-4 h-4 mr-2" />
+              {currentStatus === 'accepted' ? 'Indo buscar paciente' : 'Indo para destino'}
+            </Button>
 
-      {/* Mapa com Rota */}
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {currentStatus === 'accepted' ? 'Rota para o Paciente' : 'Rota para o Destino'}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <MapboxMap
-            center={driverLocation ? [driverLocation.lng, driverLocation.lat] : undefined}
-            markers={getMapMarkers()}
-            showRoute={true}
-            pickupCoords={routeCoords?.pickup}
-            destinationCoords={routeCoords?.destination}
-            className="w-full h-80 rounded-lg"
-          />
-        </CardContent>
-      </Card>
-    </div>
+            {/* Avisos de Proximidade */}
+            {currentStatus === 'accepted' && isNearPickup && (
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  🎯 Você está próximo ao local de coleta! Você pode iniciar a corrida.
+                </p>
+              </div>
+            )}
+
+            {currentStatus === 'in_progress' && isNearDestination && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-800">
+                  🎯 Você chegou ao destino! Você pode finalizar a corrida.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Mapa Pequeno de Referência */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Visão Geral da Rota</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <MapboxMap
+              center={driverLocation ? [driverLocation.lng, driverLocation.lat] : undefined}
+              markers={[
+                ...(driverLocation ? [{
+                  id: 'driver',
+                  coordinates: [driverLocation.lng, driverLocation.lat] as [number, number],
+                  type: 'driver' as const,
+                }] : []),
+                ...(destination.coords ? [{
+                  id: 'destination',
+                  coordinates: destination.coords,
+                  type: destination.type,
+                }] : [])
+              ]}
+              showRoute={true}
+              pickupCoords={driverLocation ? [driverLocation.lng, driverLocation.lat] : undefined}
+              destinationCoords={destination.coords}
+              className="w-full h-48 rounded-lg"
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Full Screen Navigation Map */}
+      <FullScreenNavigationMap
+        isOpen={showFullScreenMap}
+        onClose={() => setShowFullScreenMap(false)}
+        ride={ride}
+        driverLocation={driverLocation}
+        destinationCoords={destination.coords}
+        destinationType={destination.type}
+        isNearDestination={destination.isNear}
+        onActionClick={destination.action}
+      />
+    </>
   );
 };
 
