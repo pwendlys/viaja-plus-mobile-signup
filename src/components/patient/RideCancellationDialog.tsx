@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -6,6 +5,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, MessageCircle, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { useRideCancellation } from '@/hooks/useRideCancellation';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import RideChatDialog from './RideChatDialog';
 
 interface RideCancellationDialogProps {
@@ -29,6 +30,7 @@ const RideCancellationDialog: React.FC<RideCancellationDialogProps> = ({
   ride,
   onRideCancelled
 }) => {
+  const { toast } = useToast();
   const [reason, setReason] = useState('');
   const [showChat, setShowChat] = useState(false);
   const { cancellationRequest, loading, requestCancellation } = useRideCancellation(ride.id);
@@ -36,16 +38,42 @@ const RideCancellationDialog: React.FC<RideCancellationDialogProps> = ({
   const handleRequestCancellation = async () => {
     if (!reason.trim()) return;
 
+    // Se a corrida ainda está pendente (sem motorista), cancelar diretamente
+    if (ride.status === 'pending' && !ride.driver) {
+      try {
+        const { error } = await supabase
+          .from('rides')
+          .update({ status: 'cancelled' })
+          .eq('id', ride.id);
+
+        if (error) throw error;
+
+        toast({
+          title: "Corrida Cancelada",
+          description: "Sua corrida foi cancelada com sucesso.",
+        });
+
+        onRideCancelled();
+        onClose();
+        return;
+      } catch (error) {
+        console.error('Erro ao cancelar corrida:', error);
+        toast({
+          title: "Erro",
+          description: "Não foi possível cancelar a corrida.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Se tem motorista, usar o sistema de solicitação
     const success = await requestCancellation(reason);
     if (success) {
       setReason('');
       if (ride.status === 'accepted' || ride.status === 'in_progress') {
         // Se a corrida foi aceita, abrir o chat
         setShowChat(true);
-      } else {
-        // Se ainda está pendente, cancelar diretamente
-        onRideCancelled();
-        onClose();
       }
     }
   };
@@ -190,7 +218,7 @@ const RideCancellationDialog: React.FC<RideCancellationDialogProps> = ({
                     disabled={!reason.trim() || loading}
                     className="flex-1"
                   >
-                    {loading ? 'Enviando...' : 'Confirmar Cancelamento'}
+                    {loading ? 'Cancelando...' : 'Confirmar Cancelamento'}
                   </Button>
                 </div>
               </div>

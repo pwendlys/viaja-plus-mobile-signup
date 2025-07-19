@@ -117,10 +117,12 @@ export const useRideCancellation = (rideId?: string) => {
 
       // Se aprovado, cancelar a corrida
       if (approve) {
-        await supabase
+        const { error: rideError } = await supabase
           .from('rides')
           .update({ status: 'cancelled' })
           .eq('id', rideId);
+
+        if (rideError) throw rideError;
       }
 
       await fetchCancellationRequest();

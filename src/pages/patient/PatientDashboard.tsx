@@ -34,7 +34,8 @@ const PatientDashboard = () => {
         event: '*',
         schema: 'public',
         table: 'rides'
-      }, () => {
+      }, (payload) => {
+        console.log('Ride update received:', payload);
         fetchActiveRides();
       })
       .subscribe();
@@ -81,10 +82,12 @@ const PatientDashboard = () => {
           driver:driver_id(full_name, phone)
         `)
         .eq('patient_id', user.id)
-        .in('status', ['pending', 'accepted', 'in_progress'])
+        .in('status', ['pending', 'accepted', 'in_progress', 'scheduled'])
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+      
+      console.log('Fetched active rides:', rides);
       setActiveRides(rides || []);
     } catch (error) {
       console.error('Erro ao buscar corridas ativas:', error);
@@ -131,6 +134,8 @@ const PatientDashboard = () => {
         return <Badge className="bg-blue-100 text-blue-800">Aceita</Badge>;
       case 'in_progress':
         return <Badge className="bg-green-100 text-green-800">Em Andamento</Badge>;
+      case 'scheduled':
+        return <Badge className="bg-purple-100 text-purple-800">Agendada</Badge>;
       case 'completed':
         return <Badge className="bg-gray-100 text-gray-800">Concluída</Badge>;
       case 'cancelled':
@@ -145,10 +150,12 @@ const PatientDashboard = () => {
   };
 
   const handleRideCancelled = () => {
+    // Atualizar a lista de corridas ativas imediatamente
     fetchActiveRides();
+    setSelectedRideForCancellation(null);
     toast({
       title: "Corrida Cancelada",
-      description: "Sua corrida foi cancelada com sucesso.",
+      description: "Sua corrida foi cancelada e movida para o histórico.",
     });
   };
 
