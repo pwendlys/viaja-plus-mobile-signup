@@ -69,11 +69,25 @@ const DriverDashboard = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Modified query to properly join driver data
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select(`
           *,
-          drivers(*)
+          drivers(
+            cnh_number,
+            vehicle_make,
+            vehicle_model,
+            vehicle_year,
+            vehicle_plate,
+            vehicle_color,
+            has_accessibility,
+            cnh_front_photo,
+            cnh_back_photo,
+            vehicle_document,
+            vehicle_photo,
+            selfie_with_document
+          )
         `)
         .eq('id', user.id)
         .single();
@@ -132,10 +146,19 @@ const DriverDashboard = () => {
   };
 
   const getCurrentPrice = () => {
-    if (!driverData?.drivers?.[0]) return null;
+    // Handle both array and object cases for drivers data
+    let driverInfo = null;
+    if (driverData?.drivers) {
+      if (Array.isArray(driverData.drivers)) {
+        driverInfo = driverData.drivers[0];
+      } else {
+        driverInfo = driverData.drivers;
+      }
+    }
     
-    const driver = driverData.drivers[0];
-    const carType = driver.has_accessibility ? 'accessibility' : 'common';
+    if (!driverInfo) return null;
+    
+    const carType = driverInfo.has_accessibility ? 'accessibility' : 'common';
     const pricing = kmPricing.find(p => p.car_type === carType);
     
     return pricing?.price_per_km || null;
@@ -143,15 +166,40 @@ const DriverDashboard = () => {
 
   // Check if driver has complete vehicle information to receive rides
   const hasCompleteVehicleInfo = () => {
-    const driver = driverData?.drivers?.[0];
-    if (!driver) return false;
+    // Handle both array and object cases for drivers data
+    let driverInfo = null;
+    if (driverData?.drivers) {
+      if (Array.isArray(driverData.drivers)) {
+        driverInfo = driverData.drivers[0];
+      } else {
+        driverInfo = driverData.drivers;
+      }
+    }
     
-    return driver.cnh_number && 
-           driver.vehicle_make && 
-           driver.vehicle_model && 
-           driver.vehicle_year && 
-           driver.vehicle_plate && 
-           driver.vehicle_color;
+    if (!driverInfo) {
+      console.log('No driver info found');
+      return false;
+    }
+    
+    const isComplete = !!(driverInfo.cnh_number && 
+           driverInfo.vehicle_make && 
+           driverInfo.vehicle_model && 
+           driverInfo.vehicle_year && 
+           driverInfo.vehicle_plate && 
+           driverInfo.vehicle_color);
+    
+    console.log('Vehicle info completeness check:', {
+      driverInfo,
+      isComplete
+    });
+    
+    return isComplete;
+  };
+
+  // Helper function to get driver info safely
+  const getDriverInfo = () => {
+    if (!driverData?.drivers) return null;
+    return Array.isArray(driverData.drivers) ? driverData.drivers[0] : driverData.drivers;
   };
 
   if (loading) {
@@ -180,6 +228,8 @@ const DriverDashboard = () => {
       </div>
     );
   }
+
+  const driverInfo = getDriverInfo();
 
   return (
     <div className="container mx-auto p-4 space-y-6">
@@ -257,27 +307,27 @@ const DriverDashboard = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {driverData.drivers && driverData.drivers.length > 0 ? (
+          {driverInfo ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-gray-600">Marca</p>
-                <p className="font-medium">{driverData.drivers[0].vehicle_make || 'Não informado'}</p>
+                <p className="font-medium">{driverInfo.vehicle_make || 'Não informado'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Modelo</p>
-                <p className="font-medium">{driverData.drivers[0].vehicle_model || 'Não informado'}</p>
+                <p className="font-medium">{driverInfo.vehicle_model || 'Não informado'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Ano</p>
-                <p className="font-medium">{driverData.drivers[0].vehicle_year || 'Não informado'}</p>
+                <p className="font-medium">{driverInfo.vehicle_year || 'Não informado'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Placa</p>
-                <p className="font-medium">{driverData.drivers[0].vehicle_plate || 'Não informado'}</p>
+                <p className="font-medium">{driverInfo.vehicle_plate || 'Não informado'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Cor</p>
-                <p className="font-medium">{driverData.drivers[0].vehicle_color || 'Não informado'}</p>
+                <p className="font-medium">{driverInfo.vehicle_color || 'Não informado'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Preço Por KM</p>
@@ -288,10 +338,10 @@ const DriverDashboard = () => {
               <div className="md:col-span-2">
                 <div className="flex items-center gap-2">
                   <div className={`w-3 h-3 rounded-full ${
-                    driverData.drivers[0].has_accessibility ? 'bg-blue-500' : 'bg-gray-400'
+                    driverInfo.has_accessibility ? 'bg-blue-500' : 'bg-gray-400'
                   }`} />
                   <span className="font-medium">
-                    {driverData.drivers[0].has_accessibility ? 'Veículo Acessível' : 'Veículo Comum'}
+                    {driverInfo.has_accessibility ? 'Veículo Acessível' : 'Veículo Comum'}
                   </span>
                 </div>
               </div>

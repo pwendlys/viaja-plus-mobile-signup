@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,29 +23,29 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
   
   // Profile data
   const [profileData, setProfileData] = useState({
-    full_name: driverData?.full_name || "",
-    phone: driverData?.phone || "",
-    cpf: driverData?.cpf || "",
-    email: driverData?.email || "",
-    birth_date: driverData?.birth_date || "",
-    cep: driverData?.cep || "",
-    street: driverData?.street || "",
-    number: driverData?.number || "",
-    neighborhood: driverData?.neighborhood || "",
-    city: driverData?.city || "",
-    state: driverData?.state || "",
-    complement: driverData?.complement || "",
+    full_name: "",
+    phone: "",
+    cpf: "",
+    email: "",
+    birth_date: "",
+    cep: "",
+    street: "",
+    number: "",
+    neighborhood: "",
+    city: "",
+    state: "",
+    complement: "",
   });
 
   // Driver specific data
   const [driverDetails, setDriverDetails] = useState({
-    cnh_number: driverData?.drivers?.[0]?.cnh_number || "",
-    vehicle_make: driverData?.drivers?.[0]?.vehicle_make || "",
-    vehicle_model: driverData?.drivers?.[0]?.vehicle_model || "",
-    vehicle_year: driverData?.drivers?.[0]?.vehicle_year || "",
-    vehicle_plate: driverData?.drivers?.[0]?.vehicle_plate || "",
-    vehicle_color: driverData?.drivers?.[0]?.vehicle_color || "",
-    has_accessibility: driverData?.drivers?.[0]?.has_accessibility || false,
+    cnh_number: "",
+    vehicle_make: "",
+    vehicle_model: "",
+    vehicle_year: "",
+    vehicle_plate: "",
+    vehicle_color: "",
+    has_accessibility: false,
   });
 
   useEffect(() => {
@@ -79,6 +80,8 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
   useEffect(() => {
     if (driverData) {
       console.log('Updating driver data from props:', driverData);
+      
+      // Update profile data
       setProfileData({
         full_name: driverData.full_name || "",
         phone: driverData.phone || "",
@@ -94,14 +97,26 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
         complement: driverData.complement || "",
       });
 
+      // Access driver data correctly - it can be an array or single object
+      let driverInfo = null;
+      if (driverData.drivers) {
+        if (Array.isArray(driverData.drivers)) {
+          driverInfo = driverData.drivers[0];
+        } else {
+          driverInfo = driverData.drivers;
+        }
+      }
+
+      console.log('Driver info found:', driverInfo);
+
       setDriverDetails({
-        cnh_number: driverData.drivers?.[0]?.cnh_number || "",
-        vehicle_make: driverData.drivers?.[0]?.vehicle_make || "",
-        vehicle_model: driverData.drivers?.[0]?.vehicle_model || "",
-        vehicle_year: driverData.drivers?.[0]?.vehicle_year || "",
-        vehicle_plate: driverData.drivers?.[0]?.vehicle_plate || "",
-        vehicle_color: driverData.drivers?.[0]?.vehicle_color || "",
-        has_accessibility: driverData.drivers?.[0]?.has_accessibility || false,
+        cnh_number: driverInfo?.cnh_number || "",
+        vehicle_make: driverInfo?.vehicle_make || "",
+        vehicle_model: driverInfo?.vehicle_model || "",
+        vehicle_year: driverInfo?.vehicle_year?.toString() || "",
+        vehicle_plate: driverInfo?.vehicle_plate || "",
+        vehicle_color: driverInfo?.vehicle_color || "",
+        has_accessibility: driverInfo?.has_accessibility || false,
       });
     }
   }, [driverData]);
@@ -127,12 +142,12 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
 
   // Check if driver has complete vehicle information
   const hasCompleteVehicleInfo = () => {
-    const isComplete = driverDetails.cnh_number && 
+    const isComplete = !!(driverDetails.cnh_number && 
            driverDetails.vehicle_make && 
            driverDetails.vehicle_model && 
            driverDetails.vehicle_year && 
            driverDetails.vehicle_plate && 
-           driverDetails.vehicle_color;
+           driverDetails.vehicle_color);
     
     console.log('Vehicle info completeness check:', {
       cnh_number: !!driverDetails.cnh_number,
@@ -162,7 +177,6 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
   const validateDriverDetails = () => {
     const errors = [];
     
-    // Check required fields
     if (!driverDetails.cnh_number.trim()) errors.push("Número da CNH é obrigatório");
     if (!driverDetails.vehicle_make.trim()) errors.push("Marca do veículo é obrigatória");
     if (!driverDetails.vehicle_model.trim()) errors.push("Modelo do veículo é obrigatório");
@@ -217,7 +231,7 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
           ...profileData,
           updated_at: new Date().toISOString()
         })
-        .eq('id', driverData.id);
+        .eq('id', user.id);
 
       if (profileError) {
         console.error('Profile update error:', profileError);
@@ -226,62 +240,40 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
 
       console.log('Profile updated successfully, now updating driver data...');
 
-      // Prepare driver data for upsert
+      // Prepare driver data for upsert - use user.id as the driver ID
       const driverDataToSave = {
-        ...driverDetails,
-        id: driverData.id,
-        vehicle_year: parseInt(driverDetails.vehicle_year.toString()) || null
+        id: user.id, // This is crucial - use the user ID as driver ID
+        cnh_number: driverDetails.cnh_number,
+        vehicle_make: driverDetails.vehicle_make,
+        vehicle_model: driverDetails.vehicle_model,
+        vehicle_year: parseInt(driverDetails.vehicle_year.toString()) || null,
+        vehicle_plate: driverDetails.vehicle_plate,
+        vehicle_color: driverDetails.vehicle_color,
+        has_accessibility: driverDetails.has_accessibility
       };
 
       console.log('Driver data to save:', driverDataToSave);
 
-      // Check if driver record exists
-      const { data: existingDriver, error: checkError } = await supabase
+      // Use upsert to handle both insert and update cases
+      const { error: driverError } = await supabase
         .from('drivers')
-        .select('id')
-        .eq('id', driverData.id)
-        .maybeSingle();
+        .upsert(driverDataToSave, {
+          onConflict: 'id'
+        });
 
-      if (checkError) {
-        console.error('Error checking existing driver:', checkError);
-        throw checkError;
+      if (driverError) {
+        console.error('Driver upsert error:', driverError);
+        throw driverError;
       }
-
-      console.log('Existing driver check result:', existingDriver);
-
-      if (existingDriver) {
-        // Update existing driver
-        console.log('Updating existing driver record...');
-        const { error: driverUpdateError } = await supabase
-          .from('drivers')
-          .update(driverDataToSave)
-          .eq('id', driverData.id);
-
-        if (driverUpdateError) {
-          console.error('Driver update error:', driverUpdateError);
-          throw driverUpdateError;
-        }
-        console.log('Driver updated successfully');
-      } else {
-        // Insert new driver
-        console.log('Inserting new driver record...');
-        const { error: driverInsertError } = await supabase
-          .from('drivers')
-          .insert(driverDataToSave);
-
-        if (driverInsertError) {
-          console.error('Driver insert error:', driverInsertError);
-          throw driverInsertError;
-        }
-        console.log('Driver inserted successfully');
-      }
+      
+      console.log('Driver data upserted successfully');
 
       // Check if profile is complete and approve automatically
       const isProfileComplete = hasCompleteVehicleInfo();
       console.log('Profile completeness check:', isProfileComplete);
-      console.log('Current driver status:', driverData.status);
+      console.log('Current driver status:', driverData?.status);
 
-      if (isProfileComplete && driverData.status !== 'approved') {
+      if (isProfileComplete && driverData?.status !== 'approved') {
         console.log('Profile is complete, approving driver...');
         const { error: statusError } = await supabase
           .from('profiles')
@@ -289,7 +281,7 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
             status: 'approved',
             updated_at: new Date().toISOString()
           })
-          .eq('id', driverData.id);
+          .eq('id', user.id);
 
         if (statusError) {
           console.error('Status update error:', statusError);
@@ -340,7 +332,7 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
       }
 
       const fileExt = file.name.split('.').pop();
-      const fileName = `${driverData.id}_${documentType}_${Date.now()}.${fileExt}`;
+      const fileName = `${user.id}_${documentType}_${Date.now()}.${fileExt}`;
       
       const { error: uploadError } = await supabase.storage
         .from('documents')
@@ -357,7 +349,7 @@ const DriverSettings = ({ driverData, onUpdate }: DriverSettingsProps) => {
       const { error: updateError } = await supabase
         .from('drivers')
         .update(updateData)
-        .eq('id', driverData.id);
+        .eq('id', user.id);
 
       if (updateError) throw updateError;
 

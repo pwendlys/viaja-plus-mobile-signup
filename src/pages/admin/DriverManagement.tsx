@@ -35,16 +35,32 @@ const DriverManagement = () => {
   // Fetch drivers from Supabase
   const fetchDrivers = async () => {
     try {
+      // Modified query to properly join drivers table
       const { data, error } = await supabase
         .from('profiles')
         .select(`
           *,
-          drivers(*)
+          drivers(
+            cnh_number,
+            vehicle_make,
+            vehicle_model,
+            vehicle_year,
+            vehicle_plate,
+            vehicle_color,
+            has_accessibility,
+            cnh_front_photo,
+            cnh_back_photo,
+            vehicle_document,
+            vehicle_photo,
+            selfie_with_document
+          )
         `)
         .eq('user_type', 'driver')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+      
+      console.log('Fetched drivers data:', data);
       setDrivers(data || []);
     } catch (error) {
       console.error('Error fetching drivers:', error);
@@ -72,6 +88,13 @@ const DriverManagement = () => {
       }, () => {
         fetchDrivers();
       })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'drivers'
+      }, () => {
+        fetchDrivers();
+      })
       .subscribe();
 
     return () => {
@@ -80,7 +103,17 @@ const DriverManagement = () => {
   }, []);
 
   const getDriverDocuments = (driver: any) => {
-    const driverInfo = driver.drivers?.[0];
+    // Handle both array and object cases for drivers data
+    let driverInfo = null;
+    if (driver.drivers) {
+      if (Array.isArray(driver.drivers)) {
+        driverInfo = driver.drivers[0];
+      } else {
+        driverInfo = driver.drivers;
+      }
+    }
+    
+    console.log('Getting documents for driver:', driver.id, 'Driver info:', driverInfo);
     
     return driverDocuments.map(doc => {
       let rawUrl: string | null = null;
@@ -432,6 +465,11 @@ const DriverManagement = () => {
     }
   };
 
+  const getDriverInfo = (driver: any) => {
+    if (!driver.drivers) return null;
+    return Array.isArray(driver.drivers) ? driver.drivers[0] : driver.drivers;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -489,200 +527,204 @@ const DriverManagement = () => {
             </CardContent>
           </Card>
         ) : (
-          filteredDrivers.map((driver) => (
-            <Card key={driver.id}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                      <Car className="w-6 h-6 text-blue-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold">{driver.full_name}</h3>
-                      <p className="text-sm text-gray-600">CPF: {driver.cpf}</p>
-                      <div className="flex items-center gap-4 mt-1">
-                        <div className="flex items-center gap-1 text-sm text-gray-600">
-                          <Phone className="h-3 w-3" />
-                          {driver.phone}
-                        </div>
-                        {driver.drivers?.[0] && (
+          filteredDrivers.map((driver) => {
+            const driverInfo = getDriverInfo(driver);
+            
+            return (
+              <Card key={driver.id}>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                        <Car className="w-6 h-6 text-blue-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold">{driver.full_name}</h3>
+                        <p className="text-sm text-gray-600">CPF: {driver.cpf}</p>
+                        <div className="flex items-center gap-4 mt-1">
                           <div className="flex items-center gap-1 text-sm text-gray-600">
-                            <Car className="h-3 w-3" />
-                            {driver.drivers[0].vehicle_make} {driver.drivers[0].vehicle_model} - {driver.drivers[0].vehicle_plate}
+                            <Phone className="h-3 w-3" />
+                            {driver.phone}
+                          </div>
+                          {driverInfo && (
+                            <div className="flex items-center gap-1 text-sm text-gray-600">
+                              <Car className="h-3 w-3" />
+                              {driverInfo.vehicle_make} {driverInfo.vehicle_model} - {driverInfo.vehicle_plate}
+                            </div>
+                          )}
+                        </div>
+                        {driver.rejected_documents && driver.rejected_documents.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-sm text-red-600 font-medium">
+                              Documentos pendentes: {driver.rejected_documents.join(', ')}
+                            </p>
                           </div>
                         )}
                       </div>
-                      {driver.rejected_documents && driver.rejected_documents.length > 0 && (
-                        <div className="mt-2">
-                          <p className="text-sm text-red-600 font-medium">
-                            Documentos pendentes: {driver.rejected_documents.join(', ')}
-                          </p>
-                        </div>
-                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {getStatusBadge(driver.status)}
+                      
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" size="sm">
+                            <Eye className="w-4 h-4 mr-1" />
+                            Ver Detalhes
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+                          <DialogHeader>
+                            <DialogTitle>Detalhes do Motorista - {driver.full_name}</DialogTitle>
+                          </DialogHeader>
+                          
+                          {/* Informações Pessoais */}
+                          <div className="grid grid-cols-2 gap-4 mb-6">
+                            <div>
+                              <label className="text-sm font-medium">Nome Completo</label>
+                              <p className="text-sm text-gray-600">{driver.full_name}</p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium">CPF</label>
+                              <p className="text-sm text-gray-600">{driver.cpf}</p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium">Email</label>
+                              <p className="text-sm text-gray-600">{driver.email}</p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium">Telefone</label>
+                              <p className="text-sm text-gray-600">{driver.phone}</p>
+                            </div>
+                            <div className="col-span-2">
+                              <label className="text-sm font-medium">Endereço</label>
+                              <p className="text-sm text-gray-600">
+                                {`${driver.street || ''}, ${driver.number || ''} - ${driver.neighborhood || ''}, ${driver.city || ''} - ${driver.state || ''}`}
+                              </p>
+                            </div>
+                            {driverInfo && (
+                              <>
+                                <div>
+                                  <label className="text-sm font-medium">CNH</label>
+                                  <p className="text-sm text-gray-600">{driverInfo.cnh_number}</p>
+                                </div>
+                                <div>
+                                  <label className="text-sm font-medium">Veículo</label>
+                                  <p className="text-sm text-gray-600">
+                                    {driverInfo.vehicle_make} {driverInfo.vehicle_model} ({driverInfo.vehicle_year})
+                                  </p>
+                                </div>
+                                <div>
+                                  <label className="text-sm font-medium">Placa</label>
+                                  <p className="text-sm text-gray-600">{driverInfo.vehicle_plate}</p>
+                                </div>
+                                <div>
+                                  <label className="text-sm font-medium">Cor</label>
+                                  <p className="text-sm text-gray-600">{driverInfo.vehicle_color}</p>
+                                </div>
+                              </>
+                            )}
+                            <div>
+                              <label className="text-sm font-medium">Data de Cadastro</label>
+                              <p className="text-sm text-gray-600">
+                                {new Date(driver.created_at).toLocaleDateString('pt-BR')}
+                              </p>
+                            </div>
+                            {driver.rejection_reason && (
+                              <div className="col-span-2">
+                                <label className="text-sm font-medium">Motivo da Rejeição</label>
+                                <p className="text-sm text-red-600">{driver.rejection_reason}</p>
+                              </div>
+                            )}
+                            {driver.rejected_documents && driver.rejected_documents.length > 0 && (
+                              <div className="col-span-2">
+                                <label className="text-sm font-medium">Documentos Rejeitados</label>
+                                <p className="text-sm text-red-600">{driver.rejected_documents.join(', ')}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Visualizador de Documentos */}
+                          <DocumentViewer 
+                            documents={getDriverDocuments(driver)}
+                            onApproveDocument={(docKey) => handleApproveDocument(driver.id, docKey)}
+                            onRejectDocument={(docKey) => handleRejectDocument(driver.id, docKey)}
+                            onApproveMultiple={(docKeys) => handleApproveMultiple(driver.id, docKeys)}
+                            onRejectMultiple={(docKeys) => handleRejectMultiple(driver.id, docKeys)}
+                            showActions={driver.status !== 'approved'}
+                            allowMultipleSelection={true}
+                          />
+                          
+                          {driver.status === "pending" && (
+                            <div className="flex flex-col gap-4 mt-6 pt-4 border-t">
+                              <div className="flex gap-2">
+                                <Button 
+                                  onClick={() => handleApprove(driver.id)}
+                                  className="flex-1 bg-green-600 hover:bg-green-700"
+                                >
+                                  <Check className="w-4 h-4 mr-1" />
+                                  Aprovar Todos
+                                </Button>
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <Button variant="outline" className="flex-1 border-red-300 text-red-600 hover:bg-red-50">
+                                      <X className="w-4 h-4 mr-1" />
+                                      Rejeitar
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent>
+                                    <DialogHeader>
+                                      <DialogTitle>Rejeitar Motorista</DialogTitle>
+                                    </DialogHeader>
+                                    <div className="space-y-4">
+                                      <div>
+                                        <label className="text-sm font-medium">Documentos que precisam ser corrigidos</label>
+                                        <div className="mt-2 space-y-2">
+                                          {driverDocuments.map((doc) => (
+                                            <div key={doc.key} className="flex items-center space-x-2">
+                                              <Checkbox
+                                                id={doc.key}
+                                                checked={rejectedDocuments.includes(doc.key)}
+                                                onCheckedChange={(checked) => handleDocumentToggle(doc.key, checked as boolean)}
+                                              />
+                                              <label 
+                                                htmlFor={doc.key}
+                                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                              >
+                                                {doc.label}
+                                              </label>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <label className="text-sm font-medium">Motivo da rejeição</label>
+                                        <Textarea
+                                          value={rejectionReason}
+                                          onChange={(e) => setRejectionReason(e.target.value)}
+                                          placeholder="Descreva os problemas encontrados nos documentos..."
+                                          className="mt-1"
+                                        />
+                                      </div>
+                                      <Button 
+                                        onClick={() => handleReject(driver.id)}
+                                        className="w-full bg-red-600 hover:bg-red-700"
+                                      >
+                                        Confirmar Rejeição
+                                      </Button>
+                                    </div>
+                                  </DialogContent>
+                                </Dialog>
+                              </div>
+                            </div>
+                          )}
+                        </DialogContent>
+                      </Dialog>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {getStatusBadge(driver.status)}
-                    
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="sm">
-                          <Eye className="w-4 h-4 mr-1" />
-                          Ver Detalhes
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-                        <DialogHeader>
-                          <DialogTitle>Detalhes do Motorista - {driver.full_name}</DialogTitle>
-                        </DialogHeader>
-                        
-                        {/* Informações Pessoais */}
-                        <div className="grid grid-cols-2 gap-4 mb-6">
-                          <div>
-                            <label className="text-sm font-medium">Nome Completo</label>
-                            <p className="text-sm text-gray-600">{driver.full_name}</p>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium">CPF</label>
-                            <p className="text-sm text-gray-600">{driver.cpf}</p>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium">Email</label>
-                            <p className="text-sm text-gray-600">{driver.email}</p>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium">Telefone</label>
-                            <p className="text-sm text-gray-600">{driver.phone}</p>
-                          </div>
-                          <div className="col-span-2">
-                            <label className="text-sm font-medium">Endereço</label>
-                            <p className="text-sm text-gray-600">
-                              {`${driver.street}, ${driver.number} - ${driver.neighborhood}, ${driver.city} - ${driver.state}`}
-                            </p>
-                          </div>
-                          {driver.drivers?.[0] && (
-                            <>
-                              <div>
-                                <label className="text-sm font-medium">CNH</label>
-                                <p className="text-sm text-gray-600">{driver.drivers[0].cnh_number}</p>
-                              </div>
-                              <div>
-                                <label className="text-sm font-medium">Veículo</label>
-                                <p className="text-sm text-gray-600">
-                                  {driver.drivers[0].vehicle_make} {driver.drivers[0].vehicle_model} ({driver.drivers[0].vehicle_year})
-                                </p>
-                              </div>
-                              <div>
-                                <label className="text-sm font-medium">Placa</label>
-                                <p className="text-sm text-gray-600">{driver.drivers[0].vehicle_plate}</p>
-                              </div>
-                              <div>
-                                <label className="text-sm font-medium">Cor</label>
-                                <p className="text-sm text-gray-600">{driver.drivers[0].vehicle_color}</p>
-                              </div>
-                            </>
-                          )}
-                          <div>
-                            <label className="text-sm font-medium">Data de Cadastro</label>
-                            <p className="text-sm text-gray-600">
-                              {new Date(driver.created_at).toLocaleDateString('pt-BR')}
-                            </p>
-                          </div>
-                          {driver.rejection_reason && (
-                            <div className="col-span-2">
-                              <label className="text-sm font-medium">Motivo da Rejeição</label>
-                              <p className="text-sm text-red-600">{driver.rejection_reason}</p>
-                            </div>
-                          )}
-                          {driver.rejected_documents && driver.rejected_documents.length > 0 && (
-                            <div className="col-span-2">
-                              <label className="text-sm font-medium">Documentos Rejeitados</label>
-                              <p className="text-sm text-red-600">{driver.rejected_documents.join(', ')}</p>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Visualizador de Documentos */}
-                        <DocumentViewer 
-                          documents={getDriverDocuments(driver)}
-                          onApproveDocument={(docKey) => handleApproveDocument(driver.id, docKey)}
-                          onRejectDocument={(docKey) => handleRejectDocument(driver.id, docKey)}
-                          onApproveMultiple={(docKeys) => handleApproveMultiple(driver.id, docKeys)}
-                          onRejectMultiple={(docKeys) => handleRejectMultiple(driver.id, docKeys)}
-                          showActions={driver.status !== 'approved'}
-                          allowMultipleSelection={true}
-                        />
-                        
-                        {driver.status === "pending" && (
-                          <div className="flex flex-col gap-4 mt-6 pt-4 border-t">
-                            <div className="flex gap-2">
-                              <Button 
-                                onClick={() => handleApprove(driver.id)}
-                                className="flex-1 bg-green-600 hover:bg-green-700"
-                              >
-                                <Check className="w-4 h-4 mr-1" />
-                                Aprovar Todos
-                              </Button>
-                              <Dialog>
-                                <DialogTrigger asChild>
-                                  <Button variant="outline" className="flex-1 border-red-300 text-red-600 hover:bg-red-50">
-                                    <X className="w-4 h-4 mr-1" />
-                                    Rejeitar
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                  <DialogHeader>
-                                    <DialogTitle>Rejeitar Motorista</DialogTitle>
-                                  </DialogHeader>
-                                  <div className="space-y-4">
-                                    <div>
-                                      <label className="text-sm font-medium">Documentos que precisam ser corrigidos</label>
-                                      <div className="mt-2 space-y-2">
-                                        {driverDocuments.map((doc) => (
-                                          <div key={doc.key} className="flex items-center space-x-2">
-                                            <Checkbox
-                                              id={doc.key}
-                                              checked={rejectedDocuments.includes(doc.key)}
-                                              onCheckedChange={(checked) => handleDocumentToggle(doc.key, checked as boolean)}
-                                            />
-                                            <label 
-                                              htmlFor={doc.key}
-                                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                            >
-                                              {doc.label}
-                                            </label>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="text-sm font-medium">Motivo da rejeição</label>
-                                      <Textarea
-                                        value={rejectionReason}
-                                        onChange={(e) => setRejectionReason(e.target.value)}
-                                        placeholder="Descreva os problemas encontrados nos documentos..."
-                                        className="mt-1"
-                                      />
-                                    </div>
-                                    <Button 
-                                      onClick={() => handleReject(driver.id)}
-                                      className="w-full bg-red-600 hover:bg-red-700"
-                                    >
-                                      Confirmar Rejeição
-                                    </Button>
-                                  </div>
-                                </DialogContent>
-                              </Dialog>
-                            </div>
-                          </div>
-                        )}
-                      </DialogContent>
-                    </Dialog>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
+                </CardContent>
+              </Card>
+            );
+          })
         )}
       </div>
     </div>
