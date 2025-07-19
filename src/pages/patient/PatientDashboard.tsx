@@ -75,6 +75,7 @@ const PatientDashboard = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Buscar apenas corridas pendentes (aguardando aceitação)
       const { data: rides, error } = await supabase
         .from('rides')
         .select(`
@@ -82,7 +83,7 @@ const PatientDashboard = () => {
           driver:driver_id(full_name, phone)
         `)
         .eq('patient_id', user.id)
-        .in('status', ['pending', 'accepted', 'in_progress', 'scheduled'])
+        .eq('status', 'pending') // Apenas corridas pendentes de aceitação
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -129,7 +130,7 @@ const PatientDashboard = () => {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
-        return <Badge className="bg-yellow-100 text-yellow-800">Pendente</Badge>;
+        return <Badge className="bg-yellow-100 text-yellow-800">Aguardando Motorista</Badge>;
       case 'accepted':
         return <Badge className="bg-blue-100 text-blue-800">Aceita</Badge>;
       case 'in_progress':
@@ -155,7 +156,7 @@ const PatientDashboard = () => {
     setSelectedRideForCancellation(null);
     toast({
       title: "Corrida Cancelada",
-      description: "Sua corrida foi cancelada e movida para o histórico.",
+      description: "Sua corrida foi cancelada e removida das corridas ativas.",
     });
   };
 
@@ -202,11 +203,14 @@ const PatientDashboard = () => {
         <Badge className="bg-green-100 text-green-800">Conta Aprovada</Badge>
       </div>
 
-      {/* Corridas Ativas */}
+      {/* Corridas Ativas - Apenas Pendentes */}
       {activeRides.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Corridas Ativas</CardTitle>
+            <CardTitle>Corridas Aguardando Motorista</CardTitle>
+            <p className="text-sm text-gray-600">
+              Suas corridas que ainda não foram aceitas por um motorista
+            </p>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -215,9 +219,9 @@ const PatientDashboard = () => {
                   <div className="flex-1">
                     <p className="font-medium">{ride.pickup_address}</p>
                     <p className="text-sm text-gray-600">→ {ride.destination_address}</p>
-                    {ride.driver && (
-                      <p className="text-sm text-blue-600">Motorista: {ride.driver.full_name}</p>
-                    )}
+                    <p className="text-sm text-gray-500">
+                      Criada em: {new Date(ride.created_at).toLocaleString('pt-BR')}
+                    </p>
                     {ride.scheduled_for && (
                       <p className="text-sm text-purple-600">
                         Agendada para: {new Date(ride.scheduled_for).toLocaleString('pt-BR')}
