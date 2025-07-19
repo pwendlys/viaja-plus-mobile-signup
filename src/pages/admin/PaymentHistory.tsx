@@ -126,21 +126,27 @@ const PaymentHistory = () => {
     const isOverdue = due && now > due;
 
     const statusConfig = {
-      pending: { label: "Pendente", variant: "secondary" as const, icon: Clock },
+      pending: { label: "Pendente", variant: "secondary" as const, icon: Clock, className: "" },
       approved: { 
         label: isOverdue ? "Atrasado" : "Aprovado", 
         variant: isOverdue ? "destructive" as const : "default" as const, 
-        icon: isOverdue ? AlertTriangle : CheckCircle 
+        icon: isOverdue ? AlertTriangle : CheckCircle,
+        className: ""
       },
-      completed: { label: "Pago", variant: "success" as const, icon: CheckCircle },
-      rejected: { label: "Rejeitado", variant: "destructive" as const, icon: AlertTriangle }
+      completed: { 
+        label: "Pago", 
+        variant: "secondary" as const, 
+        icon: CheckCircle,
+        className: "bg-green-100 text-green-800 hover:bg-green-200"
+      },
+      rejected: { label: "Rejeitado", variant: "destructive" as const, icon: AlertTriangle, className: "" }
     };
 
     const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
     const Icon = config.icon;
 
     return (
-      <Badge variant={config.variant} className="flex items-center gap-1">
+      <Badge variant={config.variant} className={`flex items-center gap-1 ${config.className}`}>
         <Icon className="h-3 w-3" />
         {config.label}
       </Badge>
